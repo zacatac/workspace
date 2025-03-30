@@ -29,6 +29,7 @@ from workspace.core.workspace import (
     stop_workspace,
     WorkspaceError,
     create_workspace,
+    switch_workspace,
 )
 
 app = typer.Typer(
@@ -164,7 +165,14 @@ def switch(
     for workspace in config.active_workspaces:
         if workspace.name == name:
             console.print(f"Switching to workspace [bold]{name}[/]")
-            # TODO: Implement workspace switching
+            try:
+                # Note: This function will output a cd command that needs to be evaluated by the shell
+                # This won't actually change directories in the current process context
+                switch_workspace(workspace, config)
+                console.print(f"[bold yellow]Note:[/] To actually change directories, run:")
+                console.print(f"[bold cyan]cd {workspace.path}[/]")
+            except WorkspaceError as e:
+                console.print(f"[red]Error:[/] {e}")
             return
     raise typer.BadParameter(f"Workspace {name} not found")
 

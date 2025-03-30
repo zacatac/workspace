@@ -341,3 +341,30 @@ def run_in_workspace(
 
     except subprocess.SubprocessError as e:
         raise WorkspaceError(f"Failed to run command in workspace: {e}")
+
+
+def switch_workspace(workspace: ActiveWorkspace, config: GlobalConfig) -> None:
+    """Switch to a workspace by changing the current directory.
+
+    Args:
+        workspace: Workspace to switch to
+        config: Global configuration to find the associated project
+
+    Raises:
+        WorkspaceError: If workspace switching fails
+    """
+    try:
+        # Verify the workspace path exists
+        if not workspace.path.exists():
+            raise WorkspaceError(f"Workspace directory not found at {workspace.path}")
+
+        # Change directory to the workspace path
+        # Since we can't actually change the directory of the parent process from here,
+        # we print the path to stdout so the wrapper script or shell can handle it
+        print(f"cd {workspace.path}")
+
+        # Alternatively, if we need to run a command to update the current directory,
+        # we could use a subprocess or return information that the CLI can use
+
+    except Exception as e:
+        raise WorkspaceError(f"Failed to switch to workspace: {e}")
