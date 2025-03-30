@@ -1,0 +1,11 @@
+[project]
+name = "example"
+
+[infrastructure]
+start = "echo 'Starting infrastructure'"
+stop = "echo 'Stopping infrastructure'"
+test = "echo 'Running tests'"
+
+[agent]
+primary = "echo 'Running primary agent'"
+readonly = "echo 'Running readonly agent'"
