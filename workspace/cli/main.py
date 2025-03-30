@@ -30,6 +30,7 @@ from workspace.core.workspace import (
     WorkspaceError,
     create_workspace,
     switch_workspace,
+    attach_to_workspace_tmux,
 )
 
 app = typer.Typer(
@@ -43,7 +44,6 @@ def get_project(ctx: typer.Context, project_name: Optional[str] = None) -> Proje
     """Get the project configuration, either from the specified name or the current directory."""
     config: GlobalConfig = ctx.obj["config"]
     if project_name:
-
         for project in config.projects:
             if project.name == project_name:
                 return project
@@ -97,9 +97,16 @@ def create(
             f"Workspace [bold]{name}[/] created successfully at [blue]{workspace.path}[/]"
         )
         console.print(f"Worktree name: [cyan]{workspace.worktree_name}[/]")
+
+        if workspace.tmux_session:
+            console.print(f"Tmux session: [magenta]{workspace.tmux_session}[/]")
+
         console.print(
             f"\nYou can now switch to this workspace with [cyan]workspace switch {name}[/]"
         )
+
+        if workspace.tmux_session:
+            console.print(f"Or attach to the tmux session with [cyan]workspace tmux {name}[/]")
     except WorkspaceError as e:
         console.print(f"[red]Error:[/] {e}")
 
@@ -127,10 +134,14 @@ def list(ctx: typer.Context) -> None:
     workspaces_table.add_column("Name", style="green")
     workspaces_table.add_column("Path", style="blue")
     workspaces_table.add_column("Status", style="yellow")
+    workspaces_table.add_column("Tmux Session", style="magenta")
 
     for workspace in config.active_workspaces:
         status = "🟢 Running" if workspace.started else "⚫ Stopped"
-        workspaces_table.add_row(workspace.project, workspace.name, str(workspace.path), status)
+        tmux_session = workspace.tmux_session or "None"
+        workspaces_table.add_row(
+            workspace.project, workspace.name, str(workspace.path), status, tmux_session
+        )
 
     console.print(workspaces_table)
 
@@ -159,6 +170,9 @@ def list(ctx: typer.Context) -> None:
 def switch(
     ctx: typer.Context,
     name: Annotated[str, typer.Argument(help="Name of the workspace to switch to")],
+    no_tmux: Annotated[
+        bool, typer.Option("--no-tmux", help="Don't attach to tmux session if one exists")
+    ] = False,
 ) -> None:
     """Switch to an existing workspace."""
     config = ctx.obj["config"]
@@ -168,9 +182,40 @@ def switch(
             try:
                 # Note: This function will output a cd command that needs to be evaluated by the shell
                 # This won't actually change directories in the current process context
-                switch_workspace(workspace, config)
+                switch_workspace(workspace, config, tmux_attach=not no_tmux)
                 console.print(f"[bold yellow]Note:[/] To actually change directories, run:")
                 console.print(f"[bold cyan]cd {workspace.path}[/]")
+
+                if workspace.tmux_session and not no_tmux:
+                    console.print(f"[bold yellow]Note:[/] To attach to tmux session, run:")
+                    console.print(f"[bold cyan]tmux attach-session -t {workspace.tmux_session}[/]")
+            except WorkspaceError as e:
+                console.print(f"[red]Error:[/] {e}")
+            return
+    raise typer.BadParameter(f"Workspace {name} not found")
+
+
+@app.command()
+def tmux(
+    ctx: typer.Context,
+    name: Annotated[str, typer.Argument(help="Name of the workspace to attach to tmux session")],
+) -> None:
+    """Attach to a workspace's tmux session."""
+    config = ctx.obj["config"]
+    for workspace in config.active_workspaces:
+        if workspace.name == name:
+            try:
+                if not workspace.tmux_session:
+                    console.print(f"[yellow]Workspace [bold]{name}[/] has no tmux session[/]")
+                    return
+
+                console.print(f"Attaching to tmux session for workspace [bold]{name}[/]")
+
+                # This will print the command that needs to be run to attach to the session
+                attach_to_workspace_tmux(workspace)
+
+                console.print(f"[bold yellow]Note:[/] To actually attach to the tmux session, run:")
+                console.print(f"[bold cyan]tmux attach-session -t {workspace.tmux_session}[/]")
             except WorkspaceError as e:
                 console.print(f"[red]Error:[/] {e}")
             return

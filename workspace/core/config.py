@@ -40,6 +40,7 @@ class ActiveWorkspace(BaseModel):
     worktree_name: str = Field(description="Worktree name used for the directory and git branch")
     path: Path = Field(description="Path to the workspace")
     started: bool = Field(description="Whether the workspace is started")
+    tmux_session: Optional[str] = Field(None, description="Name of the associated tmux session")
 
 
 class TaskType(str, Enum):

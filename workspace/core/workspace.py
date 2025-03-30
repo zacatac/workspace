@@ -1,6 +1,7 @@
 import os
 import subprocess
 import tomli
+import shlex
 from pathlib import Path
 from typing import Any, Optional
 
@@ -21,6 +22,117 @@ class WorkspaceError(Exception):
     """Base exception for workspace operations."""
 
     pass
+
+
+def create_tmux_session(session_name: str, start_directory: Path) -> bool:
+    """Create a new tmux session if it doesn't exist.
+
+    Args:
+        session_name: Name for the tmux session
+        start_directory: Directory to start the session in
+
+    Returns:
+        True if session was created or already exists, False otherwise
+
+    Raises:
+        WorkspaceError: If tmux command fails
+    """
+    try:
+        # Check if the session already exists
+        result = subprocess.run(
+            ["tmux", "has-session", "-t", session_name],
+            capture_output=True,
+            text=True,
+        )
+
+        # If session exists, return True
+        if result.returncode == 0:
+            return True
+
+        # Create a new session
+        result = subprocess.run(
+            ["tmux", "new-session", "-d", "-s", session_name, "-c", str(start_directory)],
+            capture_output=True,
+            text=True,
+        )
+
+        if result.returncode != 0:
+            raise WorkspaceError(f"Failed to create tmux session: {result.stderr}")
+
+        return True
+
+    except subprocess.SubprocessError as e:
+        raise WorkspaceError(f"Failed to create tmux session: {e}")
+
+
+def destroy_tmux_session(session_name: str) -> bool:
+    """Destroy a tmux session.
+
+    Args:
+        session_name: Name of the tmux session to destroy
+
+    Returns:
+        True if session was destroyed, False if it didn't exist
+
+    Raises:
+        WorkspaceError: If tmux command fails
+    """
+    try:
+        # Check if the session exists
+        result = subprocess.run(
+            ["tmux", "has-session", "-t", session_name],
+            capture_output=True,
+            text=True,
+        )
+
+        # If session doesn't exist, return False
+        if result.returncode != 0:
+            return False
+
+        # Kill the session
+        result = subprocess.run(
+            ["tmux", "kill-session", "-t", session_name],
+            capture_output=True,
+            text=True,
+        )
+
+        if result.returncode != 0:
+            raise WorkspaceError(f"Failed to destroy tmux session: {result.stderr}")
+
+        return True
+
+    except subprocess.SubprocessError as e:
+        raise WorkspaceError(f"Failed to destroy tmux session: {e}")
+
+
+def attach_to_tmux_session(session_name: str) -> None:
+    """Attach to a tmux session.
+
+    This function doesn't actually attach, since we can't control the parent
+    process, but it prints the command to attach to the session.
+
+    Args:
+        session_name: Name of the tmux session to attach to
+
+    Raises:
+        WorkspaceError: If the session doesn't exist
+    """
+    try:
+        # Check if the session exists
+        result = subprocess.run(
+            ["tmux", "has-session", "-t", session_name],
+            capture_output=True,
+            text=True,
+        )
+
+        if result.returncode != 0:
+            raise WorkspaceError(f"Tmux session '{session_name}' doesn't exist")
+
+        # Print the command to attach to the session
+        print(f"tmux attach-session -t {shlex.quote(session_name)}")
+
+    except subprocess.SubprocessError as e:
+        raise WorkspaceError(f"Failed to attach to tmux session: {e}")
 
 
 def get_project_for_workspace(workspace: ActiveWorkspace, config: GlobalConfig) -> Project:
@@ -148,12 +260,23 @@ def create_workspace(
                 base_branch=branch,
             )
 
+        # Create a tmux session for the workspace
+        tmux_session_result: Optional[str] = None
+        tmux_session_name = f"{project.name}-{worktree_name}"
+        try:
+            if create_tmux_session(tmux_session_name, worktree_path):
+                tmux_session_result = tmux_session_name
+        except WorkspaceError:
+            # If tmux session creation fails, we'll continue without it
+            pass
+
         return ActiveWorkspace(
             project=project.name,
             name=name,
             worktree_name=worktree_name,
             path=worktree_path,
             started=False,
+            tmux_session=tmux_session_result,
         )
 
     except (GitError, OSError) as e:
@@ -183,6 +306,14 @@ def destroy_workspace(
         project = get_project_for_workspace(workspace, config)
         project_root = project.root_directory
         remove_worktree(project_root, workspace.path, force)
+
+        # Clean up tmux session if it exists
+        if workspace.tmux_session:
+            try:
+                destroy_tmux_session(workspace.tmux_session)
+            except WorkspaceError:
+                # If tmux session destruction fails, we'll continue with the rest of cleanup
+                pass
 
         # Clean up workspace directory
         if workspace.path.exists():
@@ -343,12 +474,30 @@ def run_in_workspace(
         raise WorkspaceError(f"Failed to run command in workspace: {e}")
 
 
-def switch_workspace(workspace: ActiveWorkspace, config: GlobalConfig) -> None:
-    """Switch to a workspace by changing the current directory.
+def attach_to_workspace_tmux(workspace: ActiveWorkspace) -> None:
+    """Attach to a workspace's tmux session.
+
+    Args:
+        workspace: Workspace to attach to
+
+    Raises:
+        WorkspaceError: If the workspace has no tmux session or it doesn't exist
+    """
+    if not workspace.tmux_session:
+        raise WorkspaceError(f"Workspace '{workspace.name}' has no associated tmux session")
+
+    attach_to_tmux_session(workspace.tmux_session)
+
+
+def switch_workspace(
+    workspace: ActiveWorkspace, config: GlobalConfig, tmux_attach: bool = True
+) -> None:
+    """Switch to a workspace by changing the current directory and optionally attaching to tmux session.
 
     Args:
         workspace: Workspace to switch to
         config: Global configuration to find the associated project
+        tmux_attach: Whether to attach to the tmux session (if one exists)
 
     Raises:
         WorkspaceError: If workspace switching fails
@@ -363,8 +512,16 @@ def switch_workspace(workspace: ActiveWorkspace, config: GlobalConfig) -> None:
         # we print the path to stdout so the wrapper script or shell can handle it
         print(f"cd {workspace.path}")
 
-        # Alternatively, if we need to run a command to update the current directory,
-        # we could use a subprocess or return information that the CLI can use
+        # If requested and a tmux session exists, attach to it
+        if tmux_attach and workspace.tmux_session:
+            # Create the session if it doesn't exist
+            if not create_tmux_session(workspace.tmux_session, workspace.path):
+                # If session creation failed, update the workspace to note that
+                workspace.tmux_session = None
+                return
+
+            # Print the command to attach to the session
+            attach_to_tmux_session(workspace.tmux_session)
 
     except Exception as e:
         raise WorkspaceError(f"Failed to switch to workspace: {e}")
