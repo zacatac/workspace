@@ -1,3 +1,5 @@
+import datetime
+from enum import Enum
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -38,12 +40,44 @@ class ActiveWorkspace(BaseModel):
     started: bool = Field(description="Whether the workspace is started")
 
 
+class TaskType(str, Enum):
+    """Task execution pattern"""
+    SEQUENTIAL = "sequential"  # Changes stacked in one worktree
+    PARALLEL = "parallel"      # Changes in independent worktrees
+
+
+class SubTask(BaseModel):
+    """A component of a larger task"""
+    id: str = Field(description="Unique identifier for the subtask")
+    name: str = Field(description="Short descriptive name")
+    description: str = Field(description="Detailed description of what needs to be done")
+    workspace_name: Optional[str] = Field(None, description="Name of associated workspace if created")
+    worktree_name: Optional[str] = Field(None, description="Name of associated worktree if created")
+    dependencies: List[str] = Field(default_factory=list, description="IDs of subtasks this depends on")
+    status: str = Field("pending", description="Current status (pending, in_progress, completed)")
+
+
+class Task(BaseModel):
+    """High-level task potentially spanning multiple workspaces"""
+    id: str = Field(description="Unique identifier for the task")
+    name: str = Field(description="Short descriptive name")
+    description: str = Field(description="Detailed task description")
+    project: str = Field(description="Project this task belongs to")
+    task_type: TaskType = Field(description="Whether subtasks are sequential or parallel")
+    subtasks: List[SubTask] = Field(default_factory=list, description="Component subtasks")
+    created_at: datetime.datetime = Field(default_factory=datetime.datetime.now)
+    status: str = Field("in_progress", description="Current overall status")
+
+
 class GlobalConfig(BaseModel):
     """Global configuration stored in ~/.workspace/config.toml"""
 
     projects: List[Project] = Field(default_factory=list, description="List of configured projects")
     active_workspaces: List[ActiveWorkspace] = Field(
         default_factory=list, description="List of active workspaces"
+    )
+    tasks: List[Task] = Field(
+        default_factory=list, description="List of active multi-workspace tasks"
     )
 
 
