@@ -233,6 +233,8 @@ def start(
             try:
                 start_workspace(workspace, config)
                 console.print(f"Workspace [bold]{name}[/] started successfully")
+                workspace.started = True
+                save_global_config(config)
             except WorkspaceError as e:
                 console.print(f"[red]Error:[/] {e}")
             return
@@ -307,6 +309,8 @@ def stop(
             try:
                 stop_workspace(workspace, config)
                 console.print(f"Workspace [bold]{name}[/] stopped successfully")
+                workspace.started = False
+                save_global_config(config)
             except WorkspaceError as e:
                 console.print(f"[red]Error:[/] {e}")
             return

@@ -27,6 +27,10 @@ class WorkspaceError(Exception):
 def create_tmux_session(session_name: str, start_directory: Path) -> bool:
     """Create a new tmux session if it doesn't exist.
 
+    Creates a session with two vertical panes:
+    - Left pane: Empty shell
+    - Right pane: Running the 'claude' command
+
     Args:
         session_name: Name for the tmux session
         start_directory: Directory to start the session in
@@ -58,6 +62,26 @@ def create_tmux_session(session_name: str, start_directory: Path) -> bool:
 
         if result.returncode != 0:
             raise WorkspaceError(f"Failed to create tmux session: {result.stderr}")
+
+        # Split window vertically
+        result = subprocess.run(
+            ["tmux", "split-window", "-h", "-t", session_name],
+            capture_output=True,
+            text=True,
+        )
+
+        if result.returncode != 0:
+            raise WorkspaceError(f"Failed to split tmux window: {result.stderr}")
+
+        # Start claude in the right pane
+        result = subprocess.run(
+            ["tmux", "send-keys", "-t", f"{session_name}.1", "claude", "Enter"],
+            capture_output=True,
+            text=True,
+        )
+
+        if result.returncode != 0:
+            raise WorkspaceError(f"Failed to start claude in tmux pane: {result.stderr}")
 
         return True
 
