@@ -9,7 +9,9 @@ dependencies = [
     "pydantic>=2.11.1",
     "rich>=13.9.4",
     "tomli>=2.2.1",
+    "tomli-w>=1.2.0",
     "typer>=0.15.2",
+    "mypy-extensions>=1.0.0",
 ]
 
 
@@ -31,3 +33,8 @@ strict = true
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
+
+# Ignore missing imports for specific modules
+[[tool.mypy.overrides]]
+module = ["git", "git.exc", "tomli", "tomli_w"]
+ignore_missing_imports = true
