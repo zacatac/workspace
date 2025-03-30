@@ -90,7 +90,8 @@ readonly = "npm run readonly"
         workspace = ActiveWorkspace(
             project="project1",
             name="feature1",
-            path=Path("/path/to/project1/worktrees/project1-feature1"),
+            worktree_name="feature1-worktree",
+            path=Path("/path/to/project1/worktrees/project1-feature1-worktree"),
             started=False,
         )
         global_config.active_workspaces.append(workspace)
