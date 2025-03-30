@@ -8,6 +8,29 @@ Modern development often requires working on multiple features simultaneously, e
 
 Workspace solves this by leveraging Git worktrees to create isolated development environments for each feature, while providing a simple interface to manage infrastructure, testing, and agent access across these environments.
 
+## Installation
+
+You can install Workspace using uv:
+
+```bash
+uv pip install -e .
+```
+
+## Usage
+
+After installation, you can run the tool in several ways:
+
+```bash
+# Direct command (after installation)
+workspace [command] [options]
+
+# Using uv
+uv run workspace [command] [options]
+
+# Using the module directly
+uv run -m workspace.cli.main [command] [options]
+```
+
 ## Approach
 
 Workspace uses a minimal, non-opinionated approach:
@@ -46,7 +69,8 @@ workspace list
 workspace switch feature-x
 
 # Run a command in a specific workspace
-workspace run feature-x test
+workspace run feature-x [command-to-run]
+For example: workspace run feature-x npm test
 
 # Destroy a workspace when you're done
 workspace destroy feature-x
