@@ -53,9 +53,10 @@ def create_workspace(
         WorkspaceError: If workspace creation fails
     """
     try:
-        # Create worktree directory
-        worktree_path = project.root_directory / "worktrees" / f"{project.name}-{name}"
-        worktree_path.parent.mkdir(parents=True, exist_ok=True)
+        # Create worktree directory in the parent directory of the project
+        worktrees_dir = project.root_directory.parent / "worktrees"
+        worktree_path = worktrees_dir / f"{project.name}-{name}"
+        worktrees_dir.mkdir(parents=True, exist_ok=True)
 
         # Create Git worktree
         create_worktree(
@@ -95,7 +96,9 @@ def destroy_workspace(
             stop_workspace(workspace, config)
 
         # Remove Git worktree
-        project_root = workspace.path.parent.parent
+        # Find the project root from the config
+        project = get_project_for_workspace(workspace, config)
+        project_root = project.root_directory
         remove_worktree(project_root, workspace.path, force)
 
         # Clean up workspace directory

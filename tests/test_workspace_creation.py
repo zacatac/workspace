@@ -14,6 +14,9 @@ class TestWorkspaceCreation:
 
     def test_create_workspace(self, example_project_config: Project, global_config: GlobalConfig):
         """Test creating a workspace."""
+        # Add project to global config
+        global_config.projects.append(example_project_config)
+        
         # Create a new workspace
         workspace = create_workspace(
             project=example_project_config, name="test-feature", branch=None
@@ -26,7 +29,7 @@ class TestWorkspaceCreation:
         assert workspace.started is False
 
         # Verify worktree directory structure
-        worktree_path = example_project_config.root_directory / "worktrees" / "example-test-feature"
+        worktree_path = example_project_config.root_directory.parent / "worktrees" / "example-test-feature"
         assert workspace.path == worktree_path
         assert (worktree_path / "main.py").exists()
         assert (worktree_path / ".workspace.toml").exists()
@@ -39,6 +42,9 @@ class TestWorkspaceCreation:
         self, example_project_config: Project, global_config: GlobalConfig, temp_workspace_dir: Path
     ):
         """Test creating a workspace from a specific base branch."""
+        # Add project to global config
+        global_config.projects.append(example_project_config)
+        
         # Create a development branch first
         os.chdir(temp_workspace_dir)
         os.system("git checkout -b development")
@@ -62,6 +68,9 @@ class TestWorkspaceCreation:
         self, example_project_config: Project, global_config: GlobalConfig
     ):
         """Test creating multiple workspaces simultaneously."""
+        # Add project to global config
+        global_config.projects.append(example_project_config)
+        
         workspaces = []
 
         # Create multiple workspaces
