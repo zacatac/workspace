@@ -11,6 +11,7 @@ from workspace.core.config import (
     Project,
     ProjectConfig,
     ActiveWorkspace,
+    Agent,
 )
 
 
@@ -41,21 +42,25 @@ readonly = "npm run readonly"
         # Read config
         project_config = ProjectConfig(
             name="test-project",
-            infrastructure={
-                "start": "docker-compose up -d",
-                "stop": "docker-compose down",
-                "test": "pytest",
-            },
-            agent={"primary": "npm start", "readonly": "npm run readonly"},
+            infrastructure=Infrastructure(
+                start="docker-compose up -d",
+                stop="docker-compose down",
+                test="pytest",
+            ),
+            agent=Agent(
+                primary="npm start",
+                readonly="npm run readonly",
+            ),
         )
 
         # Verify config
         assert project_config.name == "test-project"
-        assert project_config.infrastructure["start"] == "docker-compose up -d"
-        assert project_config.infrastructure["stop"] == "docker-compose down"
-        assert project_config.infrastructure["test"] == "pytest"
-        assert project_config.agent["primary"] == "npm start"
-        assert project_config.agent["readonly"] == "npm run readonly"
+        assert project_config.infrastructure.start == "docker-compose up -d"
+        assert project_config.infrastructure.stop == "docker-compose down"
+        assert project_config.infrastructure.test == "pytest"
+        assert project_config.agent is not None
+        assert project_config.agent.primary == "npm start"
+        assert project_config.agent.readonly == "npm run readonly"
 
     def test_global_config(self):
         """Test global configuration functionality."""
@@ -63,19 +68,15 @@ readonly = "npm run readonly"
         project1 = Project(
             name="project1",
             root_directory=Path("/path/to/project1"),
-            infrastructure=Infrastructure(
-                start="echo 'Starting project1'", stop="echo 'Stopping project1'"
-            ),
+            infrastructure=None,
+            agent=None,
         )
 
         project2 = Project(
             name="project2",
             root_directory=Path("/path/to/project2"),
-            infrastructure=Infrastructure(
-                start="echo 'Starting project2'",
-                stop="echo 'Stopping project2'",
-                test="echo 'Testing project2'",
-            ),
+            infrastructure=None,
+            agent=None,
         )
 
         global_config = GlobalConfig(projects=[project1, project2], active_workspaces=[])

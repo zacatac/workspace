@@ -22,11 +22,13 @@ class Agent(BaseModel):
 
 
 class Project(BaseModel):
-    """Project configuration"""
+    """Project configuration in global config"""
 
     name: str = Field(description="Project name")
     root_directory: Path = Field(description="Root directory of the project")
-    infrastructure: Infrastructure = Field(description="Infrastructure configuration")
+    infrastructure: Optional[Infrastructure] = Field(
+        None, description="Infrastructure configuration"
+    )
     agent: Optional[Agent] = Field(None, description="Agent configuration")
 
 
@@ -42,23 +44,30 @@ class ActiveWorkspace(BaseModel):
 
 class TaskType(str, Enum):
     """Task execution pattern"""
+
     SEQUENTIAL = "sequential"  # Changes stacked in one worktree
-    PARALLEL = "parallel"      # Changes in independent worktrees
+    PARALLEL = "parallel"  # Changes in independent worktrees
 
 
 class SubTask(BaseModel):
     """A component of a larger task"""
+
     id: str = Field(description="Unique identifier for the subtask")
     name: str = Field(description="Short descriptive name")
     description: str = Field(description="Detailed description of what needs to be done")
-    workspace_name: Optional[str] = Field(None, description="Name of associated workspace if created")
+    workspace_name: Optional[str] = Field(
+        None, description="Name of associated workspace if created"
+    )
     worktree_name: Optional[str] = Field(None, description="Name of associated worktree if created")
-    dependencies: List[str] = Field(default_factory=list, description="IDs of subtasks this depends on")
+    dependencies: List[str] = Field(
+        default_factory=list, description="IDs of subtasks this depends on"
+    )
     status: str = Field("pending", description="Current status (pending, in_progress, completed)")
 
 
 class Task(BaseModel):
     """High-level task potentially spanning multiple workspaces"""
+
     id: str = Field(description="Unique identifier for the task")
     name: str = Field(description="Short descriptive name")
     description: str = Field(description="Detailed task description")
@@ -85,5 +94,5 @@ class ProjectConfig(BaseModel):
     """Project-specific configuration stored in .workspace.toml"""
 
     name: str = Field(description="Project name")
-    infrastructure: Dict[str, str] = Field(description="Infrastructure commands")
-    agent: Dict[str, str] = Field(description="Agent commands")
+    infrastructure: Infrastructure = Field(description="Infrastructure configuration")
+    agent: Optional[Agent] = Field(None, description="Agent configuration")

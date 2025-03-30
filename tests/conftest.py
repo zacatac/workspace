@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from workspace.core.config import GlobalConfig, Project
+from workspace.core.config import GlobalConfig, Project, ProjectConfig, Infrastructure, Agent
 
 
 @pytest.fixture
@@ -35,15 +35,25 @@ def example_project_config(temp_workspace_dir: Path) -> Project:
     return Project(
         name="example",
         root_directory=temp_workspace_dir,
-        infrastructure={
-            "start": "echo 'Starting infrastructure'",
-            "stop": "echo 'Stopping infrastructure'",
-            "test": "echo 'Running tests'",
-        },
-        agent={
-            "primary": "echo 'Running primary agent'",
-            "readonly": "echo 'Running readonly agent'",
-        },
+        infrastructure=None,
+        agent=None,
+    )
+
+
+@pytest.fixture
+def example_project_config_with_infra(temp_workspace_dir: Path) -> ProjectConfig:
+    """Create an example project configuration with infrastructure and agent settings."""
+    return ProjectConfig(
+        name="example",
+        infrastructure=Infrastructure(
+            start="echo 'Starting infrastructure'",
+            stop="echo 'Stopping infrastructure'",
+            test="echo 'Running tests'",
+        ),
+        agent=Agent(
+            primary="echo 'Running primary agent'",
+            readonly="echo 'Running readonly agent'",
+        ),
     )
 
 

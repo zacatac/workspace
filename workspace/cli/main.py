@@ -11,6 +11,7 @@ from rich.table import Table
 
 from workspace.core.agent import AgentError
 from workspace.core.config import GlobalConfig, Project, Task, TaskType
+from workspace.core.config_manager import load_global_config
 from workspace.core.task import (
     TaskError,
     cancel_task,
@@ -40,6 +41,7 @@ def get_project(ctx: typer.Context, project_name: Optional[str] = None) -> Proje
     """Get the project configuration, either from the specified name or the current directory."""
     config: GlobalConfig = ctx.obj["config"]
     if project_name:
+
         for project in config.projects:
             if project.name == project_name:
                 return project
@@ -58,8 +60,9 @@ def get_project(ctx: typer.Context, project_name: Optional[str] = None) -> Proje
 @app.callback()
 def callback(ctx: typer.Context) -> None:
     """Initialize the CLI context with global configuration."""
-    # TODO: Load configuration from ~/.workspace/config.toml
-    ctx.obj = {"config": GlobalConfig()}
+    # Load configuration from ~/.workspace/config.toml
+    config = load_global_config()
+    ctx.obj = {"config": config}
 
 
 @app.command()
@@ -79,20 +82,53 @@ def create(
 
 @app.command()
 def list(ctx: typer.Context) -> None:
-    """List all active workspaces."""
+    """List all active workspaces, projects, and tasks."""
     config = ctx.obj["config"]
 
-    table = Table(title="Active Workspaces")
-    table.add_column("Project", style="cyan")
-    table.add_column("Name", style="green")
-    table.add_column("Path", style="blue")
-    table.add_column("Status", style="yellow")
+    # Display projects
+    console.print("\n[bold]Projects[/]")
+    projects_table = Table()
+    projects_table.add_column("Name", style="cyan")
+    projects_table.add_column("Root Directory", style="blue")
+
+    for project in config.projects:
+        projects_table.add_row(project.name, str(project.root_directory))
+
+    console.print(projects_table)
+
+    # Display active workspaces
+    console.print("\n[bold]Active Workspaces[/]")
+    workspaces_table = Table()
+    workspaces_table.add_column("Project", style="cyan")
+    workspaces_table.add_column("Name", style="green")
+    workspaces_table.add_column("Path", style="blue")
+    workspaces_table.add_column("Status", style="yellow")
 
     for workspace in config.active_workspaces:
         status = "🟢 Running" if workspace.started else "⚫ Stopped"
-        table.add_row(workspace.project, workspace.name, str(workspace.path), status)
+        workspaces_table.add_row(workspace.project, workspace.name, str(workspace.path), status)
 
-    console.print(table)
+    console.print(workspaces_table)
+
+    # Display active tasks
+    console.print("\n[bold]Active Tasks[/]")
+    if not config.tasks:
+        console.print("[yellow]No active tasks found.[/]")
+    else:
+        tasks_table = Table()
+        tasks_table.add_column("ID", style="cyan")
+        tasks_table.add_column("Name", style="green")
+        tasks_table.add_column("Project", style="blue")
+        tasks_table.add_column("Status", style="yellow")
+        tasks_table.add_column("Subtasks", style="white")
+
+        for task in config.tasks:
+            completed = sum(1 for st in task.subtasks if st.status == "completed")
+            status_str = f"{completed}/{len(task.subtasks)} completed"
+
+            tasks_table.add_row(task.id, task.name, task.project, task.status, status_str)
+
+        console.print(tasks_table)
 
 
 @app.command()
@@ -211,55 +247,49 @@ app.add_typer(task_app, name="task")
 def task_create(
     ctx: typer.Context,
     description: Annotated[str, typer.Argument(help="Description of the task")],
-    project: Annotated[
-        Optional[str], typer.Option(help="Project name for the task")
-    ] = None,
-    agent: Annotated[
-        Optional[str], typer.Option(help="Agent command to use for analysis")
-    ] = None,
+    project: Annotated[Optional[str], typer.Option(help="Project name for the task")] = None,
+    agent: Annotated[Optional[str], typer.Option(help="Agent command to use for analysis")] = None,
 ) -> None:
     """Create a new task plan using agent analysis."""
     try:
         # Get project
         project_config = get_project(ctx, project)
-        
+
         # Use agent to analyze task
         console.print(f"Analyzing task for project [bold]{project_config.name}[/]...")
         task = create_task_plan(
-            project=project_config,
-            task_description=description,
-            agent_command=agent
+            project=project_config, task_description=description, agent_command=agent
         )
-        
+
         # Show task plan summary
         console.print(f"\n[bold green]Task Plan Created: {task.id}[/]")
         console.print(f"[bold]{task.name}[/]")
         console.print(f"Type: [cyan]{task.task_type.value}[/]")
-        
+
         # Show subtasks
         table = Table(title="Subtasks")
         table.add_column("ID", style="cyan")
         table.add_column("Name", style="green")
         table.add_column("Description", style="white")
         table.add_column("Dependencies", style="yellow")
-        
+
         for subtask in task.subtasks:
             deps = ", ".join(subtask.dependencies) if subtask.dependencies else "None"
             table.add_row(
-                subtask.id, 
-                subtask.name, 
+                subtask.id,
+                subtask.name,
                 subtask.description[:50] + ("..." if len(subtask.description) > 50 else ""),
-                deps
+                deps,
             )
-            
+
         console.print(table)
-        
+
         # Instructions for next steps
         console.print("\n[bold]Next Steps:[/]")
         console.print(f"1. Review the task plan at [cyan]~/.workspace/tasks/{task.id}.toml[/]")
         console.print(f"2. Edit the plan if needed")
         console.print(f"3. Confirm the plan with [cyan]workspace task confirm {task.id}[/]")
-        
+
     except (TaskError, AgentError) as e:
         console.print(f"[red]Error:[/] {e}")
 
@@ -272,23 +302,25 @@ def task_confirm(
     """Confirm a task plan and make it active."""
     try:
         config = ctx.obj["config"]
-        
+
         # Confirm task plan
         task = confirm_task_plan(task_id, config)
-        
+
         console.print(f"[bold green]Task Confirmed: {task.id}[/]")
         console.print(f"[bold]{task.name}[/] is now active")
-        
+
         # Show ready subtasks
         ready = get_ready_subtasks(task)
         if ready:
             console.print("\n[bold]Ready to work on:[/]")
             for subtask in ready:
                 console.print(f"• [cyan]{subtask.id}[/]: {subtask.name}")
-            console.print(f"\nStart working with [cyan]workspace task start {task.id} <subtask_id>[/]")
+            console.print(
+                f"\nStart working with [cyan]workspace task start {task.id} <subtask_id>[/]"
+            )
         else:
             console.print("\n[yellow]No subtasks are ready to work on yet.[/]")
-            
+
     except TaskError as e:
         console.print(f"[red]Error:[/] {e}")
 
@@ -297,11 +329,11 @@ def task_confirm(
 def task_list(ctx: typer.Context) -> None:
     """List all active tasks."""
     config = ctx.obj["config"]
-    
+
     if not config.tasks:
         console.print("[yellow]No active tasks found.[/]")
         return
-        
+
     table = Table(title="Active Tasks")
     table.add_column("ID", style="cyan")
     table.add_column("Name", style="green")
@@ -309,20 +341,15 @@ def task_list(ctx: typer.Context) -> None:
     table.add_column("Type", style="magenta")
     table.add_column("Status", style="yellow")
     table.add_column("Subtasks", style="white")
-    
+
     for task in config.tasks:
         completed = sum(1 for st in task.subtasks if st.status == "completed")
         status_str = f"{completed}/{len(task.subtasks)} completed"
-        
+
         table.add_row(
-            task.id,
-            task.name,
-            task.project,
-            task.task_type.value,
-            task.status,
-            status_str
+            task.id, task.name, task.project, task.task_type.value, task.status, status_str
         )
-        
+
     console.print(table)
 
 
@@ -333,13 +360,13 @@ def task_show(
 ) -> None:
     """Show details of a task."""
     config = ctx.obj["config"]
-    
+
     # Find task
     task = get_task_by_id(task_id, config)
     if not task:
         console.print(f"[red]Error:[/] Task {task_id} not found")
         return
-        
+
     # Display task details
     console.print(f"[bold green]Task: {task.id}[/]")
     console.print(f"[bold]{task.name}[/]")
@@ -347,10 +374,10 @@ def task_show(
     console.print(f"Type: [magenta]{task.task_type.value}[/]")
     console.print(f"Status: [yellow]{task.status}[/]")
     console.print(f"Created: {task.created_at.strftime('%Y-%m-%d %H:%M')}")
-    
+
     console.print("\n[bold]Description:[/]")
     console.print(Panel(task.description))
-    
+
     # Show subtasks
     table = Table(title="Subtasks")
     table.add_column("ID", style="cyan")
@@ -358,28 +385,22 @@ def task_show(
     table.add_column("Status", style="yellow")
     table.add_column("Workspace", style="blue")
     table.add_column("Dependencies", style="magenta")
-    
+
     for subtask in task.subtasks:
         deps = ", ".join(subtask.dependencies) if subtask.dependencies else "None"
         workspace = subtask.workspace_name or "Not created"
-        
+
         # Determine status color
-        status_color = {
-            "pending": "white",
-            "in_progress": "yellow",
-            "completed": "green"
-        }.get(subtask.status, "white")
-        
-        table.add_row(
-            subtask.id,
-            subtask.name,
-            f"[{status_color}]{subtask.status}[/]",
-            workspace,
-            deps
+        status_color = {"pending": "white", "in_progress": "yellow", "completed": "green"}.get(
+            subtask.status, "white"
         )
-        
+
+        table.add_row(
+            subtask.id, subtask.name, f"[{status_color}]{subtask.status}[/]", workspace, deps
+        )
+
     console.print(table)
-    
+
     # Show ready subtasks
     ready = get_ready_subtasks(task)
     if ready:
@@ -397,39 +418,39 @@ def task_start(
     """Start working on a subtask."""
     try:
         config = ctx.obj["config"]
-        
+
         # Find task
         task = get_task_by_id(task_id, config)
         if not task:
             console.print(f"[red]Error:[/] Task {task_id} not found")
             return
-            
+
         # Execute subtask
         subtask = execute_subtask(task, subtask_id, config)
-        
+
         console.print(f"[bold green]Started work on subtask: {subtask.id}[/]")
         console.print(f"[bold]{subtask.name}[/]")
-        
+
         if subtask.workspace_name:
             console.print(f"\nWorkspace: [blue]{subtask.workspace_name}[/]")
             console.print(f"Worktree: [blue]{subtask.worktree_name}[/]")
-            
+
             # Find workspace path
             workspace_path = None
             for ws in config.active_workspaces:
                 if ws.name == subtask.workspace_name:
                     workspace_path = ws.path
                     break
-                    
+
             if workspace_path:
                 console.print(f"Path: [green]{workspace_path}[/]")
-                
+
         console.print("\n[bold]Description:[/]")
         console.print(Panel(subtask.description))
-        
+
         console.print("\n[bold]When finished:[/]")
         console.print(f"Run [cyan]workspace task complete {task_id} {subtask_id}[/]")
-        
+
     except TaskError as e:
         console.print(f"[red]Error:[/] {e}")
 
@@ -443,18 +464,18 @@ def task_complete(
     """Mark a subtask as completed."""
     try:
         config = ctx.obj["config"]
-        
+
         # Find task
         task = get_task_by_id(task_id, config)
         if not task:
             console.print(f"[red]Error:[/] Task {task_id} not found")
             return
-            
+
         # Mark subtask as completed
         task = complete_subtask(task, subtask_id, config)
-        
+
         console.print(f"[bold green]Completed subtask: {subtask_id}[/]")
-        
+
         # Check if all subtasks are completed
         if task.status == "completed":
             console.print(f"[bold green]Task {task_id} is now complete![/]")
@@ -465,10 +486,12 @@ def task_complete(
                 console.print("\n[bold]Next up:[/]")
                 for subtask in ready:
                     console.print(f"• [cyan]{subtask.id}[/]: {subtask.name}")
-                console.print(f"\nStart working with [cyan]workspace task start {task_id} <subtask_id>[/]")
+                console.print(
+                    f"\nStart working with [cyan]workspace task start {task_id} <subtask_id>[/]"
+                )
             else:
                 console.print("\n[yellow]No more subtasks are ready to work on yet.[/]")
-                
+
     except TaskError as e:
         console.print(f"[red]Error:[/] {e}")
 
@@ -484,24 +507,24 @@ def task_cancel(
     """Cancel a task and clean up its resources."""
     try:
         config = ctx.obj["config"]
-        
+
         # Find task
         task = get_task_by_id(task_id, config)
         if not task:
             console.print(f"[red]Error:[/] Task {task_id} not found")
             return
-            
+
         # Confirm cancellation
         if not force:
             confirm = typer.confirm(f"Are you sure you want to cancel task {task_id}?")
             if not confirm:
                 raise typer.Abort()
-                
+
         # Cancel task
         cancel_task(task, config, force)
-        
+
         console.print(f"[bold yellow]Task {task_id} has been cancelled[/]")
-        
+
     except TaskError as e:
         console.print(f"[red]Error:[/] {e}")
 
@@ -515,19 +538,20 @@ def task_edit(
     try:
         # Get path to task plan
         from workspace.core.agent import get_task_plan_path
+
         plan_path = get_task_plan_path(task_id)
-        
+
         if not plan_path.exists():
             console.print(f"[red]Error:[/] Task plan {task_id} not found")
             return
-            
+
         # Open plan in editor
         editor = os.environ.get("EDITOR", "vim")
         subprocess.run([editor, plan_path])
-        
+
         console.print(f"[green]Task plan {task_id} updated[/]")
         console.print(f"Run [cyan]workspace task confirm {task_id}[/] to apply changes")
-        
+
     except Exception as e:
         console.print(f"[red]Error:[/] {e}")
 

@@ -1,11 +1,19 @@
 import os
 import subprocess
+import tomli
 from pathlib import Path
 from typing import Any, Optional
 
 import petname  # type: ignore
 
-from workspace.core.config import ActiveWorkspace, GlobalConfig, Project
+from workspace.core.config import (
+    ActiveWorkspace,
+    GlobalConfig,
+    Infrastructure,
+    Project,
+    ProjectConfig,
+    Agent,
+)
 from workspace.core.git import GitError, create_worktree, list_worktrees, remove_worktree
 
 
@@ -38,23 +46,21 @@ def get_project_for_workspace(workspace: ActiveWorkspace, config: GlobalConfig) 
 
 def generate_worktree_name() -> str:
     """Generate a friendly, readable worktree name.
-    
+
     Returns:
         A unique, human-readable name for the worktree
     """
     # Generate a readable name with 2 words (adjective + noun)
     return str(petname.generate(words=2, separator="-"))
 
-def find_unused_worktree(
-    project: Project, 
-    config: GlobalConfig
-) -> Optional[tuple[str, Path]]:
+
+def find_unused_worktree(project: Project, config: GlobalConfig) -> Optional[tuple[str, Path]]:
     """Find an unused worktree that can be repurposed.
-    
+
     Args:
         project: Project configuration
         config: Global configuration
-        
+
     Returns:
         Tuple of (worktree_name, path) if an unused worktree is found, None otherwise
     """
@@ -63,13 +69,13 @@ def find_unused_worktree(
         worktrees_dir = project.root_directory.parent / "worktrees"
         if not worktrees_dir.exists():
             return None
-            
+
         # Get list of all existing worktrees
         worktrees = list_worktrees(project.root_directory)
-        
+
         # Get all active workspace paths
         active_workspace_paths = {ws.path for ws in config.active_workspaces}
-        
+
         # Find worktrees that belong to this project and aren't in active workspaces
         project_prefix = f"{project.name}-"
         for worktree_path, branch_name in worktrees:
@@ -77,16 +83,17 @@ def find_unused_worktree(
             worktree_dir = worktree_path.name
             if isinstance(worktree_dir, str) and worktree_dir.startswith(project_prefix):
                 # Extract the worktree name from directory name
-                worktree_name = worktree_dir[len(project_prefix):]
-                
+                worktree_name = worktree_dir[len(project_prefix) :]
+
                 # If this worktree isn't used by any active workspace, it's available
                 if worktree_path not in active_workspace_paths:
                     return (worktree_name, worktree_path)
-        
+
         return None
     except (GitError, OSError):
         # If there's any error, just return None
         return None
+
 
 def create_workspace(
     project: Project,
@@ -114,17 +121,17 @@ def create_workspace(
     """
     try:
         worktree_path = None
-        
+
         # Try to reuse an existing worktree if requested and config is provided
         if reuse_worktree and config and not worktree_name:
             unused_worktree = find_unused_worktree(project, config)
             if unused_worktree:
                 worktree_name, worktree_path = unused_worktree
-        
+
         # Generate or use provided worktree name if we didn't find an unused one
         if not worktree_name:
             worktree_name = generate_worktree_name()
-        
+
         # If we don't have a worktree path yet, create a new one
         if not worktree_path:
             # Create worktree directory in the parent directory of the project
@@ -190,6 +197,49 @@ def destroy_workspace(
         raise WorkspaceError(f"Failed to destroy workspace: {e}")
 
 
+def load_project_config(project: Project) -> ProjectConfig:
+    """Load the ProjectConfig from the project's .workspace.toml file.
+
+    Args:
+        project: The project to load the config for
+
+    Returns:
+        The loaded ProjectConfig
+
+    Raises:
+        WorkspaceError: If the config file doesn't exist or can't be loaded
+    """
+    try:
+        config_path = project.root_directory / ".workspace.toml"
+        if not config_path.exists():
+            raise WorkspaceError(f"Project config file not found at {config_path}")
+
+        with open(config_path, "rb") as f:
+            config_data = tomli.load(f)
+
+        # Extract the sections we need
+        project_data = config_data.get("project", {})
+        infrastructure_data = config_data.get("infrastructure", {})
+        agent_data = config_data.get("agent", {})
+
+        # Create Infrastructure object if data exists
+        infrastructure = Infrastructure(
+            start=infrastructure_data.get("start", "echo 'No start command defined'"),
+            stop=infrastructure_data.get("stop", "echo 'No stop command defined'"),
+            test=infrastructure_data.get("test"),
+        )
+
+        # Return the config
+        return ProjectConfig(
+            name=project_data.get("name", project.name),
+            infrastructure=infrastructure,
+            agent=Agent(**agent_data) if agent_data else None,
+        )
+
+    except Exception as e:
+        raise WorkspaceError(f"Failed to load project config: {e}")
+
+
 def start_workspace(workspace: ActiveWorkspace, config: GlobalConfig) -> None:
     """Start a workspace's infrastructure.
 
@@ -202,9 +252,17 @@ def start_workspace(workspace: ActiveWorkspace, config: GlobalConfig) -> None:
     """
     try:
         project = get_project_for_workspace(workspace, config)
+
+        # Load the project config from the project's .workspace.toml file
+        project_config = load_project_config(project)
+
+        # Check if infrastructure configuration exists
+        if not project_config.infrastructure:
+            raise WorkspaceError("No infrastructure configuration found for project")
+
         # Run the start command in the workspace directory
         result = subprocess.run(
-            project.infrastructure.start,
+            project_config.infrastructure.start,
             shell=True,
             cwd=workspace.path,
             capture_output=True,
@@ -232,9 +290,17 @@ def stop_workspace(workspace: ActiveWorkspace, config: GlobalConfig) -> None:
     """
     try:
         project = get_project_for_workspace(workspace, config)
+
+        # Load the project config from the project's .workspace.toml file
+        project_config = load_project_config(project)
+
+        # Check if infrastructure configuration exists
+        if not project_config.infrastructure:
+            raise WorkspaceError("No infrastructure configuration found for project")
+
         # Run the stop command in the workspace directory
         result = subprocess.run(
-            project.infrastructure.stop,
+            project_config.infrastructure.stop,
             shell=True,
             cwd=workspace.path,
             capture_output=True,

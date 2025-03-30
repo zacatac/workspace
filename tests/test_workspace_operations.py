@@ -3,16 +3,18 @@
 import os
 import subprocess
 from pathlib import Path
+from unittest.mock import patch, MagicMock
 
 import pytest
 
-from workspace.core.config import GlobalConfig, Project
+from workspace.core.config import GlobalConfig, Project, ProjectConfig, Infrastructure, Agent
 from workspace.core.workspace import (
     create_workspace,
     destroy_workspace,
     run_in_workspace,
     start_workspace,
     stop_workspace,
+    load_project_config,
 )
 
 
@@ -43,16 +45,48 @@ class TestWorkspaceOperations:
             # If cleanup fails, log but don't fail the test
             print("Failed to clean up workspace")
 
-    def test_start_workspace(self, global_config: GlobalConfig):
+    @patch("workspace.core.workspace.load_project_config")
+    def test_start_workspace(self, mock_load_config, global_config: GlobalConfig):
         """Test starting a workspace."""
+        # Mock the return value of load_project_config
+        mock_config = ProjectConfig(
+            name="example",
+            infrastructure=Infrastructure(
+                start="echo 'Starting infrastructure'",
+                stop="echo 'Stopping infrastructure'",
+                test="echo 'Running tests'",
+            ),
+            agent=Agent(
+                primary="echo 'Running primary agent'",
+                readonly="echo 'Running readonly agent'",
+            ),
+        )
+        mock_load_config.return_value = mock_config
+
         # Start the workspace
         start_workspace(self.workspace, global_config)
 
         # Verify the workspace is started
         assert self.workspace.started is True
 
-    def test_stop_workspace(self, global_config: GlobalConfig):
+    @patch("workspace.core.workspace.load_project_config")
+    def test_stop_workspace(self, mock_load_config, global_config: GlobalConfig):
         """Test stopping a workspace."""
+        # Mock the return value of load_project_config
+        mock_config = ProjectConfig(
+            name="example",
+            infrastructure=Infrastructure(
+                start="echo 'Starting infrastructure'",
+                stop="echo 'Stopping infrastructure'",
+                test="echo 'Running tests'",
+            ),
+            agent=Agent(
+                primary="echo 'Running primary agent'",
+                readonly="echo 'Running readonly agent'",
+            ),
+        )
+        mock_load_config.return_value = mock_config
+
         # Start the workspace first
         start_workspace(self.workspace, global_config)
         assert self.workspace.started is True
