@@ -160,6 +160,12 @@ wheels = [
 ]
 
 [[package]]
+name = "petname"
+version = "2.6"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/8e/a5/348c90b3fb09d7bd76f7dacf1b92e251d75bfbe715006cb9b84eb23be1b1/petname-2.6.tar.gz", hash = "sha256:981c31ef772356a373640d1bb7c67c102e0159eda14578c67a1c99d5b34c9e4c", size = 8357 }
+
+[[package]]
 name = "pluggy"
 version = "1.5.0"
 source = { registry = "https://pypi.org/simple" }
@@ -419,6 +425,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "gitpython" },
     { name = "mypy-extensions" },
+    { name = "petname" },
     { name = "pydantic" },
     { name = "pytest" },
     { name = "pytest-cov" },
@@ -433,6 +440,7 @@ dependencies = [
 requires-dist = [
     { name = "gitpython", specifier = ">=3.1.44" },
     { name = "mypy-extensions", specifier = ">=1.0.0" },
+    { name = "petname", specifier = ">=2.6" },
     { name = "pydantic", specifier = ">=2.11.1" },
     { name = "pytest", specifier = ">=8.3.5" },
     { name = "pytest-cov", specifier = ">=6.0.0" },
