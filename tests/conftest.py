@@ -10,6 +10,13 @@ import pytest
 from workspace.core.config import GlobalConfig, Project, ProjectConfig, Infrastructure, Agent
 
 
+# Set test mode for all tests to prevent writing to user's actual config
+@pytest.fixture(autouse=True)
+def set_test_mode(monkeypatch):
+    """Set test mode to prevent modifying user's actual config."""
+    monkeypatch.setenv("WORKSPACE_TEST_MODE", "1")
+
+
 @pytest.fixture
 def temp_workspace_dir(tmp_path: Path) -> Path:
     """Create a temporary directory for testing workspaces with a git repo."""

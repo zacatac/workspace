@@ -57,7 +57,7 @@ def save_global_config(config: GlobalConfig) -> None:
 
     try:
         with open(config_file, "wb") as f:
-            tomli_w.dump(config.model_dump(), f)
+            tomli_w.dump(config.model_dump(mode="json", exclude_none=True), f)
 
     except (OSError, TypeError) as e:
         raise ConfigError(f"Failed to save global configuration: {e}")
@@ -103,7 +103,7 @@ def save_project_config(config: ProjectConfig, project_dir: Path) -> None:
 
     try:
         with open(config_file, "wb") as f:
-            tomli_w.dump(config.model_dump(), f)
+            tomli_w.dump(config.model_dump(mode="json", exclude_none=True), f)
 
     except (OSError, TypeError) as e:
         raise ConfigError(f"Failed to save project configuration: {e}")

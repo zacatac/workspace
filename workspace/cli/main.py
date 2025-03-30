@@ -11,7 +11,7 @@ from rich.table import Table
 
 from workspace.core.agent import AgentError
 from workspace.core.config import GlobalConfig, Project, Task, TaskType
-from workspace.core.config_manager import load_global_config
+from workspace.core.config_manager import load_global_config, save_global_config
 from workspace.core.task import (
     TaskError,
     cancel_task,
@@ -28,6 +28,7 @@ from workspace.core.workspace import (
     start_workspace,
     stop_workspace,
     WorkspaceError,
+    create_workspace,
 )
 
 app = typer.Typer(
@@ -76,8 +77,30 @@ def create(
 ) -> None:
     """Create a new workspace for feature development."""
     project_config = get_project(ctx, project)
+    config = ctx.obj["config"]
     console.print(f"Creating workspace [bold]{name}[/] in project [bold]{project_config.name}[/]")
-    # TODO: Implement workspace creation
+
+    try:
+        workspace = create_workspace(
+            project=project_config,
+            name=name,
+            branch=branch,
+            config=config,
+        )
+
+        # Add workspace to active workspaces
+        config.active_workspaces.append(workspace)
+        save_config_if_not_testing(config)
+
+        console.print(
+            f"Workspace [bold]{name}[/] created successfully at [blue]{workspace.path}[/]"
+        )
+        console.print(f"Worktree name: [cyan]{workspace.worktree_name}[/]")
+        console.print(
+            f"\nYou can now switch to this workspace with [cyan]workspace switch {name}[/]"
+        )
+    except WorkspaceError as e:
+        console.print(f"[red]Error:[/] {e}")
 
 
 @app.command()
@@ -212,6 +235,7 @@ def destroy(
                 destroy_workspace(workspace, config, force)
                 # Remove workspace from active workspaces list
                 config.active_workspaces.remove(workspace)
+                save_config_if_not_testing(config)
                 console.print(f"Workspace [bold]{name}[/] destroyed successfully")
             except WorkspaceError as e:
                 console.print(f"[red]Error:[/] {e}")
@@ -305,6 +329,7 @@ def task_confirm(
 
         # Confirm task plan
         task = confirm_task_plan(task_id, config)
+        save_config_if_not_testing(config)
 
         console.print(f"[bold green]Task Confirmed: {task.id}[/]")
         console.print(f"[bold]{task.name}[/] is now active")
@@ -427,6 +452,7 @@ def task_start(
 
         # Execute subtask
         subtask = execute_subtask(task, subtask_id, config)
+        save_config_if_not_testing(config)
 
         console.print(f"[bold green]Started work on subtask: {subtask.id}[/]")
         console.print(f"[bold]{subtask.name}[/]")
@@ -473,6 +499,7 @@ def task_complete(
 
         # Mark subtask as completed
         task = complete_subtask(task, subtask_id, config)
+        save_config_if_not_testing(config)
 
         console.print(f"[bold green]Completed subtask: {subtask_id}[/]")
 
@@ -522,6 +549,7 @@ def task_cancel(
 
         # Cancel task
         cancel_task(task, config, force)
+        save_config_if_not_testing(config)
 
         console.print(f"[bold yellow]Task {task_id} has been cancelled[/]")
 
@@ -554,6 +582,15 @@ def task_edit(
 
     except Exception as e:
         console.print(f"[red]Error:[/] {e}")
+
+
+def save_config_if_not_testing(config: GlobalConfig) -> None:
+    """Save the global configuration if not in test mode.
+
+    This helps prevent tests from overwriting the user's actual config file.
+    """
+    if os.environ.get("WORKSPACE_TEST_MODE") != "1":
+        save_global_config(config)
 
 
 if __name__ == "__main__":
