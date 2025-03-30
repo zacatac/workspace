@@ -1,9 +1,9 @@
 import os
 import subprocess
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
-from workspace.core.config import ActiveWorkspace, Project
+from workspace.core.config import ActiveWorkspace, GlobalConfig, Project
 from workspace.core.git import GitError, create_worktree, remove_worktree
 
 
@@ -11,6 +11,27 @@ class WorkspaceError(Exception):
     """Base exception for workspace operations."""
 
     pass
+
+
+def get_project_for_workspace(workspace: ActiveWorkspace, config: GlobalConfig) -> Project:
+    """Get the Project configuration for an ActiveWorkspace.
+
+    Args:
+        workspace: The workspace to get the project for
+        config: The global configuration
+
+    Returns:
+        The associated Project configuration
+
+    Raises:
+        WorkspaceError: If the project for the workspace is not found
+    """
+    for project in config.projects:
+        if project.name == workspace.project:
+            return project
+    raise WorkspaceError(
+        f"Project '{workspace.project}' not found for workspace '{workspace.name}'"
+    )
 
 
 def create_workspace(
@@ -55,11 +76,14 @@ def create_workspace(
         raise WorkspaceError(f"Failed to create workspace: {e}")
 
 
-def destroy_workspace(workspace: ActiveWorkspace, force: bool = False) -> None:
+def destroy_workspace(
+    workspace: ActiveWorkspace, config: GlobalConfig, force: bool = False
+) -> None:
     """Destroy a workspace.
 
     Args:
         workspace: Workspace to destroy
+        config: Global configuration to find the associated project
         force: Whether to force destroy even if there are changes
 
     Raises:
@@ -68,7 +92,7 @@ def destroy_workspace(workspace: ActiveWorkspace, force: bool = False) -> None:
     try:
         # Stop the workspace if it's running
         if workspace.started:
-            stop_workspace(workspace)
+            stop_workspace(workspace, config)
 
         # Remove Git worktree
         project_root = workspace.path.parent.parent
@@ -87,17 +111,18 @@ def destroy_workspace(workspace: ActiveWorkspace, force: bool = False) -> None:
         raise WorkspaceError(f"Failed to destroy workspace: {e}")
 
 
-def start_workspace(workspace: ActiveWorkspace, project: Project) -> None:
+def start_workspace(workspace: ActiveWorkspace, config: GlobalConfig) -> None:
     """Start a workspace's infrastructure.
 
     Args:
         workspace: Workspace to start
-        project: Project configuration
+        config: Global configuration to find the associated project
 
     Raises:
         WorkspaceError: If workspace startup fails
     """
     try:
+        project = get_project_for_workspace(workspace, config)
         # Run the start command in the workspace directory
         result = subprocess.run(
             project.infrastructure.start,
@@ -116,17 +141,18 @@ def start_workspace(workspace: ActiveWorkspace, project: Project) -> None:
         raise WorkspaceError(f"Failed to start workspace: {e}")
 
 
-def stop_workspace(workspace: ActiveWorkspace, project: Project) -> None:
+def stop_workspace(workspace: ActiveWorkspace, config: GlobalConfig) -> None:
     """Stop a workspace's infrastructure.
 
     Args:
         workspace: Workspace to stop
-        project: Project configuration
+        config: Global configuration to find the associated project
 
     Raises:
         WorkspaceError: If workspace shutdown fails
     """
     try:
+        project = get_project_for_workspace(workspace, config)
         # Run the stop command in the workspace directory
         result = subprocess.run(
             project.infrastructure.stop,
@@ -148,7 +174,7 @@ def stop_workspace(workspace: ActiveWorkspace, project: Project) -> None:
 def run_in_workspace(
     workspace: ActiveWorkspace,
     command: list[str],
-) -> subprocess.CompletedProcess:
+) -> subprocess.CompletedProcess[Any]:
     """Run a command in a workspace.
 
     Args:
