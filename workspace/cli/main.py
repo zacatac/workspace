@@ -1,16 +1,16 @@
+import builtins
 import os
 import subprocess
 from pathlib import Path
-from typing import Annotated, List, Optional, NoReturn
+from typing import Annotated
 
 import typer
 from rich.console import Console
-from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
 from workspace.core.agent import AgentError
-from workspace.core.config import GlobalConfig, Project, Task, TaskType
+from workspace.core.config import GlobalConfig, Project
 from workspace.core.config_manager import load_global_config, save_global_config
 from workspace.core.task import (
     TaskError,
@@ -23,14 +23,14 @@ from workspace.core.task import (
     get_task_by_id,
 )
 from workspace.core.workspace import (
+    WorkspaceError,
+    attach_to_workspace_tmux,
+    create_workspace,
     destroy_workspace,
     run_in_workspace,
     start_workspace,
     stop_workspace,
-    WorkspaceError,
-    create_workspace,
     switch_workspace,
-    attach_to_workspace_tmux,
 )
 
 app = typer.Typer(
@@ -40,7 +40,7 @@ app = typer.Typer(
 console = Console()
 
 
-def get_project(ctx: typer.Context, project_name: Optional[str] = None) -> Project:
+def get_project(ctx: typer.Context, project_name: str | None = None) -> Project:
     """Get the project configuration, either from the specified name or the current directory."""
     config: GlobalConfig = ctx.obj["config"]
     if project_name:
@@ -71,10 +71,8 @@ def callback(ctx: typer.Context) -> None:
 def create(
     ctx: typer.Context,
     name: Annotated[str, typer.Argument(help="Name of the workspace to create")],
-    project: Annotated[
-        Optional[str], typer.Option(help="Project name to create workspace in")
-    ] = None,
-    branch: Annotated[Optional[str], typer.Option(help="Branch to base workspace on")] = None,
+    project: Annotated[str | None, typer.Option(help="Project name to create workspace in")] = None,
+    branch: Annotated[str | None, typer.Option(help="Branch to base workspace on")] = None,
 ) -> None:
     """Create a new workspace for feature development."""
     project_config = get_project(ctx, project)
@@ -180,14 +178,14 @@ def switch(
         if workspace.name == name:
             console.print(f"Switching to workspace [bold]{name}[/]")
             try:
-                # Note: This function will output a cd command that needs to be evaluated by the shell
+                # Note: This outputs a cd command that needs to be evaluated by the shell.
                 # This won't actually change directories in the current process context
                 switch_workspace(workspace, config, tmux_attach=not no_tmux)
-                console.print(f"[bold yellow]Note:[/] To actually change directories, run:")
+                console.print("[bold yellow]Note:[/] To actually change directories, run:")
                 console.print(f"[bold cyan]cd {workspace.path}[/]")
 
                 if workspace.tmux_session and not no_tmux:
-                    console.print(f"[bold yellow]Note:[/] To attach to tmux session, run:")
+                    console.print("[bold yellow]Note:[/] To attach to tmux session, run:")
                     console.print(f"[bold cyan]tmux attach-session -t {workspace.tmux_session}[/]")
             except WorkspaceError as e:
                 console.print(f"[red]Error:[/] {e}")
@@ -214,7 +212,7 @@ def tmux(
                 # This will print the command that needs to be run to attach to the session
                 attach_to_workspace_tmux(workspace)
 
-                console.print(f"[bold yellow]Note:[/] To actually attach to the tmux session, run:")
+                console.print("[bold yellow]Note:[/] To actually attach to the tmux session, run:")
                 console.print(f"[bold cyan]tmux attach-session -t {workspace.tmux_session}[/]")
             except WorkspaceError as e:
                 console.print(f"[red]Error:[/] {e}")
@@ -245,7 +243,7 @@ def start(
 def run(
     ctx: typer.Context,
     workspace: Annotated[str, typer.Argument(help="Name of the workspace to run in")],
-    command: Annotated[List[str], typer.Argument(help="Command to run in the workspace")],
+    command: Annotated[builtins.list[str], typer.Argument(help="Command to run in the workspace")],
 ) -> None:
     """Run a command in a specific workspace."""
     config = ctx.obj["config"]
@@ -324,8 +322,8 @@ app.add_typer(task_app, name="task")
 def task_create(
     ctx: typer.Context,
     description: Annotated[str, typer.Argument(help="Description of the task")],
-    project: Annotated[Optional[str], typer.Option(help="Project name for the task")] = None,
-    agent: Annotated[Optional[str], typer.Option(help="Agent command to use for analysis")] = None,
+    project: Annotated[str | None, typer.Option(help="Project name for the task")] = None,
+    agent: Annotated[str | None, typer.Option(help="Agent command to use for analysis")] = None,
 ) -> None:
     """Create a new task plan using agent analysis."""
     try:
@@ -364,7 +362,7 @@ def task_create(
         # Instructions for next steps
         console.print("\n[bold]Next Steps:[/]")
         console.print(f"1. Review the task plan at [cyan]~/.workspace/tasks/{task.id}.toml[/]")
-        console.print(f"2. Edit the plan if needed")
+        console.print("2. Edit the plan if needed")
         console.print(f"3. Confirm the plan with [cyan]workspace task confirm {task.id}[/]")
 
     except (TaskError, AgentError) as e:

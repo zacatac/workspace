@@ -1,24 +1,16 @@
 """Tests for workspace operations functionality."""
 
-import os
-import subprocess
-from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from workspace.core.config import GlobalConfig, Project, ProjectConfig, Infrastructure, Agent
+from workspace.core.config import Agent, GlobalConfig, Infrastructure, Project, ProjectConfig
 from workspace.core.workspace import (
     create_workspace,
     destroy_workspace,
     run_in_workspace,
     start_workspace,
     stop_workspace,
-    load_project_config,
-    create_tmux_session,
-    destroy_tmux_session,
-    attach_to_tmux_session,
-    attach_to_workspace_tmux,
     switch_workspace,
 )
 

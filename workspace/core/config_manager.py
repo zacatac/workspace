@@ -1,11 +1,9 @@
-import os
 from pathlib import Path
-from typing import Optional
 
 import tomli
 import tomli_w
 
-from workspace.core.config import GlobalConfig, Project, ProjectConfig
+from workspace.core.config import GlobalConfig, ProjectConfig
 
 
 class ConfigError(Exception):
@@ -41,7 +39,7 @@ def load_global_config() -> GlobalConfig:
         return GlobalConfig.model_validate(data)
 
     except (OSError, tomli.TOMLDecodeError, ValueError) as e:
-        raise ConfigError(f"Failed to load global configuration: {e}")
+        raise ConfigError(f"Failed to load global configuration: {e}") from e
 
 
 def save_global_config(config: GlobalConfig) -> None:
@@ -60,10 +58,10 @@ def save_global_config(config: GlobalConfig) -> None:
             tomli_w.dump(config.model_dump(mode="json", exclude_none=True), f)
 
     except (OSError, TypeError) as e:
-        raise ConfigError(f"Failed to save global configuration: {e}")
+        raise ConfigError(f"Failed to save global configuration: {e}") from e
 
 
-def load_project_config(project_dir: Path) -> Optional[ProjectConfig]:
+def load_project_config(project_dir: Path) -> ProjectConfig | None:
     """Load a project's configuration file.
 
     Args:
@@ -86,7 +84,7 @@ def load_project_config(project_dir: Path) -> Optional[ProjectConfig]:
         return ProjectConfig.model_validate(data)
 
     except (OSError, tomli.TOMLDecodeError, ValueError) as e:
-        raise ConfigError(f"Failed to load project configuration: {e}")
+        raise ConfigError(f"Failed to load project configuration: {e}") from e
 
 
 def save_project_config(config: ProjectConfig, project_dir: Path) -> None:
@@ -106,10 +104,10 @@ def save_project_config(config: ProjectConfig, project_dir: Path) -> None:
             tomli_w.dump(config.model_dump(mode="json", exclude_none=True), f)
 
     except (OSError, TypeError) as e:
-        raise ConfigError(f"Failed to save project configuration: {e}")
+        raise ConfigError(f"Failed to save project configuration: {e}") from e
 
 
-def find_project_root(start_dir: Optional[Path] = None) -> Optional[Path]:
+def find_project_root(start_dir: Path | None = None) -> Path | None:
     """Find the root directory of a project by looking for .workspace.toml.
 
     Args:

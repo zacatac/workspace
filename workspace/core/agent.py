@@ -1,17 +1,14 @@
 import json
-import os
 import subprocess
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
 
 import tomli
 import tomli_w
 
-from workspace.core.config import GlobalConfig, Project, SubTask, Task, TaskType
-from workspace.core.config_manager import ConfigError
-from workspace.core.workspace import load_project_config, WorkspaceError
+from workspace.core.config import Project, SubTask, Task, TaskType
+from workspace.core.workspace import load_project_config
 
 
 class AgentError(Exception):
@@ -53,7 +50,7 @@ def generate_subtask_id() -> str:
 
 
 def analyze_task_with_agent(
-    task_description: str, project: Project, agent_command: Optional[str] = None
+    task_description: str, project: Project, agent_command: str | None = None
 ) -> Task:
     """Use an agent to analyze a task and break it into structured subtasks.
 
@@ -84,7 +81,7 @@ def analyze_task_with_agent(
 
         # Create prompt for the agent
         prompt = f"""
-You are a development task planner. Your job is to analyze a development task and break it down into logical subtasks.
+You are a development task planner. Your job is to analyze a task and break it down into subtasks.
 
 PROJECT: {project.name}
 
@@ -92,13 +89,13 @@ TASK DESCRIPTION:
 {task_description}
 
 Your job is to:
-1. Determine if this task should be executed SEQUENTIALLY (all changes in one workspace, one after another) or in PARALLEL (multiple independent workspaces)
+1. Determine if task should be SEQUENTIAL (all changes in one workspace) or PARALLEL
 2. Break down the task into logical subtasks
 3. Identify dependencies between subtasks (which subtasks depend on others)
 4. Return a structured plan
 
-For SEQUENTIAL tasks, all work will happen in a single worktree/branch, with changes building on each other.
-For PARALLEL tasks, each subtask will have its own independent worktree and can be worked on separately.
+For SEQUENTIAL tasks, work happens in a single worktree with changes building on each other.
+For PARALLEL tasks, each subtask will have its own independent worktree.
 
 FORMAT YOUR RESPONSE AS A JSON OBJECT with the following structure:
 {{
@@ -180,7 +177,7 @@ FORMAT YOUR RESPONSE AS A JSON OBJECT with the following structure:
         return task
 
     except (subprocess.SubprocessError, json.JSONDecodeError, ValueError, KeyError) as e:
-        raise AgentError(f"Error analyzing task with agent: {e}")
+        raise AgentError(f"Error analyzing task with agent: {e}") from e
 
 
 def save_task_plan(task: Task) -> Path:
@@ -207,7 +204,7 @@ def save_task_plan(task: Task) -> Path:
         return path
 
     except (OSError, TypeError) as e:
-        raise AgentError(f"Failed to save task plan: {e}")
+        raise AgentError(f"Failed to save task plan: {e}") from e
 
 
 def load_task_plan(task_id: str) -> Task:
@@ -235,7 +232,7 @@ def load_task_plan(task_id: str) -> Task:
         return Task.model_validate(data)
 
     except (OSError, tomli.TOMLDecodeError, ValueError) as e:
-        raise AgentError(f"Failed to load task plan: {e}")
+        raise AgentError(f"Failed to load task plan: {e}") from e
 
 
 def update_task_plan(task: Task) -> None:
@@ -252,4 +249,4 @@ def update_task_plan(task: Task) -> None:
         save_task_plan(task)
 
     except Exception as e:
-        raise AgentError(f"Failed to update task plan: {e}")
+        raise AgentError(f"Failed to update task plan: {e}") from e

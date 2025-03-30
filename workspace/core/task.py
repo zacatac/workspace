@@ -1,6 +1,3 @@
-from pathlib import Path
-from typing import List, Optional
-
 from workspace.core.agent import (
     AgentError,
     analyze_task_with_agent,
@@ -19,7 +16,7 @@ class TaskError(Exception):
 
 
 def create_task_plan(
-    project: Project, task_description: str, agent_command: Optional[str] = None
+    project: Project, task_description: str, agent_command: str | None = None
 ) -> Task:
     """Create a task plan using agent analysis.
 
@@ -41,12 +38,12 @@ def create_task_plan(
         )
 
         # Save task plan for user review
-        plan_path = save_task_plan(task)
+        save_task_plan(task)
 
         return task
 
     except AgentError as e:
-        raise TaskError(f"Failed to create task plan: {e}")
+        raise TaskError(f"Failed to create task plan: {e}") from e
 
 
 def confirm_task_plan(task_id: str, config: GlobalConfig) -> Task:
@@ -78,10 +75,10 @@ def confirm_task_plan(task_id: str, config: GlobalConfig) -> Task:
         return task
 
     except AgentError as e:
-        raise TaskError(f"Failed to confirm task plan: {e}")
+        raise TaskError(f"Failed to confirm task plan: {e}") from e
 
 
-def get_task_by_id(task_id: str, config: GlobalConfig) -> Optional[Task]:
+def get_task_by_id(task_id: str, config: GlobalConfig) -> Task | None:
     """Get a task by ID.
 
     Args:
@@ -97,7 +94,7 @@ def get_task_by_id(task_id: str, config: GlobalConfig) -> Optional[Task]:
     return None
 
 
-def get_ready_subtasks(task: Task) -> List[SubTask]:
+def get_ready_subtasks(task: Task) -> list[SubTask]:
     """Get subtasks that are ready to be worked on.
 
     Args:
@@ -210,7 +207,7 @@ def execute_subtask(task: Task, subtask_id: str, config: GlobalConfig) -> SubTas
         return subtask
 
     except Exception as e:
-        raise TaskError(f"Failed to execute subtask: {e}")
+        raise TaskError(f"Failed to execute subtask: {e}") from e
 
 
 def complete_subtask(task: Task, subtask_id: str, config: GlobalConfig) -> Task:
@@ -272,7 +269,7 @@ def complete_subtask(task: Task, subtask_id: str, config: GlobalConfig) -> Task:
         return task
 
     except Exception as e:
-        raise TaskError(f"Failed to complete subtask: {e}")
+        raise TaskError(f"Failed to complete subtask: {e}") from e
 
 
 def cancel_task(task: Task, config: GlobalConfig, force: bool = False) -> None:
@@ -324,4 +321,4 @@ def cancel_task(task: Task, config: GlobalConfig, force: bool = False) -> None:
         update_task_plan(task)
 
     except Exception as e:
-        raise TaskError(f"Failed to cancel task: {e}")
+        raise TaskError(f"Failed to cancel task: {e}") from e

@@ -3,8 +3,6 @@
 import os
 from pathlib import Path
 
-import pytest
-
 from workspace.core.config import GlobalConfig, Project
 from workspace.core.workspace import create_workspace, destroy_workspace
 

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from workspace.core.config import GlobalConfig, Project, ProjectConfig, Infrastructure, Agent
+from workspace.core.config import Agent, GlobalConfig, Infrastructure, Project, ProjectConfig
 
 
 # Set test mode for all tests to prevent writing to user's actual config

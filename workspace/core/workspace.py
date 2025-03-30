@@ -1,19 +1,19 @@
 import os
-import subprocess
-import tomli
 import shlex
+import subprocess
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import petname  # type: ignore
+import tomli
 
 from workspace.core.config import (
     ActiveWorkspace,
+    Agent,
     GlobalConfig,
     Infrastructure,
     Project,
     ProjectConfig,
-    Agent,
 )
 from workspace.core.git import GitError, create_worktree, list_worktrees, remove_worktree
 
@@ -62,7 +62,7 @@ def create_tmux_session(session_name: str, start_directory: Path) -> bool:
         return True
 
     except subprocess.SubprocessError as e:
-        raise WorkspaceError(f"Failed to create tmux session: {e}")
+        raise WorkspaceError(f"Failed to create tmux session: {e}") from e
 
 
 def destroy_tmux_session(session_name: str) -> bool:
@@ -102,7 +102,7 @@ def destroy_tmux_session(session_name: str) -> bool:
         return True
 
     except subprocess.SubprocessError as e:
-        raise WorkspaceError(f"Failed to destroy tmux session: {e}")
+        raise WorkspaceError(f"Failed to destroy tmux session: {e}") from e
 
 
 def attach_to_tmux_session(session_name: str) -> None:
@@ -132,7 +132,7 @@ def attach_to_tmux_session(session_name: str) -> None:
         print(f"tmux attach-session -t {shlex.quote(session_name)}")
 
     except subprocess.SubprocessError as e:
-        raise WorkspaceError(f"Failed to attach to tmux session: {e}")
+        raise WorkspaceError(f"Failed to attach to tmux session: {e}") from e
 
 
 def get_project_for_workspace(workspace: ActiveWorkspace, config: GlobalConfig) -> Project:
@@ -166,7 +166,7 @@ def generate_worktree_name() -> str:
     return str(petname.generate(words=2, separator="-"))
 
 
-def find_unused_worktree(project: Project, config: GlobalConfig) -> Optional[tuple[str, Path]]:
+def find_unused_worktree(project: Project, config: GlobalConfig) -> tuple[str, Path] | None:
     """Find an unused worktree that can be repurposed.
 
     Args:
@@ -190,7 +190,7 @@ def find_unused_worktree(project: Project, config: GlobalConfig) -> Optional[tup
 
         # Find worktrees that belong to this project and aren't in active workspaces
         project_prefix = f"{project.name}-"
-        for worktree_path, branch_name in worktrees:
+        for worktree_path, _branch_name in worktrees:
             # Check if this worktree belongs to our project
             worktree_dir = worktree_path.name
             if isinstance(worktree_dir, str) and worktree_dir.startswith(project_prefix):
@@ -210,9 +210,9 @@ def find_unused_worktree(project: Project, config: GlobalConfig) -> Optional[tup
 def create_workspace(
     project: Project,
     name: str,
-    branch: Optional[str] = None,
-    worktree_name: Optional[str] = None,
-    config: Optional[GlobalConfig] = None,
+    branch: str | None = None,
+    worktree_name: str | None = None,
+    config: GlobalConfig | None = None,
     reuse_worktree: bool = True,
 ) -> ActiveWorkspace:
     """Create a new workspace.
@@ -261,7 +261,7 @@ def create_workspace(
             )
 
         # Create a tmux session for the workspace
-        tmux_session_result: Optional[str] = None
+        tmux_session_result: str | None = None
         tmux_session_name = f"{project.name}-{worktree_name}"
         try:
             if create_tmux_session(tmux_session_name, worktree_path):
@@ -280,7 +280,7 @@ def create_workspace(
         )
 
     except (GitError, OSError) as e:
-        raise WorkspaceError(f"Failed to create workspace: {e}")
+        raise WorkspaceError(f"Failed to create workspace: {e}") from e
 
 
 def destroy_workspace(
@@ -309,11 +309,10 @@ def destroy_workspace(
 
         # Clean up tmux session if it exists
         if workspace.tmux_session:
-            try:
+            from contextlib import suppress
+
+            with suppress(WorkspaceError):
                 destroy_tmux_session(workspace.tmux_session)
-            except WorkspaceError:
-                # If tmux session destruction fails, we'll continue with the rest of cleanup
-                pass
 
         # Clean up workspace directory
         if workspace.path.exists():
@@ -325,7 +324,7 @@ def destroy_workspace(
             workspace.path.rmdir()
 
     except (GitError, OSError) as e:
-        raise WorkspaceError(f"Failed to destroy workspace: {e}")
+        raise WorkspaceError(f"Failed to destroy workspace: {e}") from e
 
 
 def load_project_config(project: Project) -> ProjectConfig:
@@ -368,7 +367,7 @@ def load_project_config(project: Project) -> ProjectConfig:
         )
 
     except Exception as e:
-        raise WorkspaceError(f"Failed to load project config: {e}")
+        raise WorkspaceError(f"Failed to load project config: {e}") from e
 
 
 def start_workspace(workspace: ActiveWorkspace, config: GlobalConfig) -> None:
@@ -406,7 +405,7 @@ def start_workspace(workspace: ActiveWorkspace, config: GlobalConfig) -> None:
         workspace.started = True
 
     except subprocess.SubprocessError as e:
-        raise WorkspaceError(f"Failed to start workspace: {e}")
+        raise WorkspaceError(f"Failed to start workspace: {e}") from e
 
 
 def stop_workspace(workspace: ActiveWorkspace, config: GlobalConfig) -> None:
@@ -444,7 +443,7 @@ def stop_workspace(workspace: ActiveWorkspace, config: GlobalConfig) -> None:
         workspace.started = False
 
     except subprocess.SubprocessError as e:
-        raise WorkspaceError(f"Failed to stop workspace: {e}")
+        raise WorkspaceError(f"Failed to stop workspace: {e}") from e
 
 
 def run_in_workspace(
@@ -471,7 +470,7 @@ def run_in_workspace(
         )
 
     except subprocess.SubprocessError as e:
-        raise WorkspaceError(f"Failed to run command in workspace: {e}")
+        raise WorkspaceError(f"Failed to run command in workspace: {e}") from e
 
 
 def attach_to_workspace_tmux(workspace: ActiveWorkspace) -> None:
@@ -492,7 +491,7 @@ def attach_to_workspace_tmux(workspace: ActiveWorkspace) -> None:
 def switch_workspace(
     workspace: ActiveWorkspace, config: GlobalConfig, tmux_attach: bool = True
 ) -> None:
-    """Switch to a workspace by changing the current directory and optionally attaching to tmux session.
+    """Switch to a workspace by changing directory and optionally attaching to tmux session.
 
     Args:
         workspace: Workspace to switch to
@@ -524,4 +523,4 @@ def switch_workspace(
             attach_to_tmux_session(workspace.tmux_session)
 
     except Exception as e:
-        raise WorkspaceError(f"Failed to switch to workspace: {e}")
+        raise WorkspaceError(f"Failed to switch to workspace: {e}") from e

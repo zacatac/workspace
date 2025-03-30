@@ -1,30 +1,25 @@
 """Tests for task management functionality."""
 
-import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-import uuid
 
 import pytest
 
 from workspace.core.agent import analyze_task_with_agent
 from workspace.core.config import (
-    GlobalConfig,
-    Project,
-    ProjectConfig,
-    Infrastructure,
     Agent,
+    Infrastructure,
+    ProjectConfig,
     SubTask,
     Task,
     TaskType,
 )
 from workspace.core.task import (
-    create_task_plan,
-    confirm_task_plan,
-    get_ready_subtasks,
-    execute_subtask,
     complete_subtask,
-    TaskError,
+    confirm_task_plan,
+    create_task_plan,
+    execute_subtask,
+    get_ready_subtasks,
 )
 
 
@@ -142,33 +137,35 @@ class TestTaskManagement:
     def test_create_task_plan(self, example_project_config):
         """Test creating a task plan."""
         # We need to mock the analyze_task_with_agent function at the module level
-        with patch("workspace.core.task.analyze_task_with_agent") as mock_analyze:
-            with patch("workspace.core.task.save_task_plan") as mock_save:
-                # Mock agent analysis
-                mock_task = Task(
-                    id="test-task-id",
-                    name="Test Task",
-                    description="Task description",
-                    project=example_project_config.name,
-                    task_type=TaskType.SEQUENTIAL,
-                    subtasks=[],
-                    status="planning",
-                )
-                mock_analyze.return_value = mock_task
-                mock_save.return_value = Path("/mock/path.toml")
+        with (
+            patch("workspace.core.task.analyze_task_with_agent") as mock_analyze,
+            patch("workspace.core.task.save_task_plan") as mock_save,
+        ):
+            # Mock agent analysis
+            mock_task = Task(
+                id="test-task-id",
+                name="Test Task",
+                description="Task description",
+                project=example_project_config.name,
+                task_type=TaskType.SEQUENTIAL,
+                subtasks=[],
+                status="planning",
+            )
+            mock_analyze.return_value = mock_task
+            mock_save.return_value = Path("/mock/path.toml")
 
-                # Create task plan
-                task = create_task_plan(
-                    project=example_project_config,
-                    task_description="Test task",
-                )
+            # Create task plan
+            task = create_task_plan(
+                project=example_project_config,
+                task_description="Test task",
+            )
 
-                # Verify results
-                assert task.id == "test-task-id"
-                assert task.name == "Test Task"
-                assert task.status == "planning"
-                mock_analyze.assert_called_once()
-                mock_save.assert_called_once()
+            # Verify results
+            assert task.id == "test-task-id"
+            assert task.name == "Test Task"
+            assert task.status == "planning"
+            mock_analyze.assert_called_once()
+            mock_save.assert_called_once()
 
     @patch("workspace.core.task.load_task_plan")
     @patch("workspace.core.task.update_task_plan")

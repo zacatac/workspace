@@ -1,24 +1,20 @@
 """Tests for configuration functionality."""
 
-import os
 from pathlib import Path
 
-import pytest
-
 from workspace.core.config import (
+    ActiveWorkspace,
+    Agent,
     GlobalConfig,
     Infrastructure,
     Project,
     ProjectConfig,
-    ActiveWorkspace,
-    Agent,
 )
 from workspace.core.config_manager import (
-    save_global_config,
     load_global_config,
-    get_config_dir,
-    save_project_config,
     load_project_config,
+    save_global_config,
+    save_project_config,
 )
 
 

@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Optional
 
 from git import Repo
 from git.exc import GitCommandError
@@ -15,7 +14,7 @@ def create_worktree(
     repo_path: Path,
     worktree_path: Path,
     branch_name: str,
-    base_branch: Optional[str] = None,
+    base_branch: str | None = None,
 ) -> None:
     """Create a new Git worktree.
 
@@ -33,10 +32,7 @@ def create_worktree(
 
         # Create new branch if it doesn't exist
         if branch_name not in repo.heads:
-            if base_branch:
-                base = repo.heads[base_branch]
-            else:
-                base = repo.head.ref
+            base = repo.heads[base_branch] if base_branch else repo.head.ref
             new_branch = repo.create_head(branch_name, base)
         else:
             new_branch = repo.heads[branch_name]
@@ -45,7 +41,7 @@ def create_worktree(
         repo.git.worktree("add", str(worktree_path), new_branch.name)
 
     except GitCommandError as e:
-        raise GitError(f"Failed to create worktree: {e}")
+        raise GitError(f"Failed to create worktree: {e}") from e
 
 
 def remove_worktree(repo_path: Path, worktree_path: Path, force: bool = False) -> None:
@@ -68,7 +64,7 @@ def remove_worktree(repo_path: Path, worktree_path: Path, force: bool = False) -
         repo.git.worktree(*args)
 
     except GitCommandError as e:
-        raise GitError(f"Failed to remove worktree: {e}")
+        raise GitError(f"Failed to remove worktree: {e}") from e
 
 
 def list_worktrees(repo_path: Path) -> list[tuple[Path, str]]:
@@ -106,4 +102,4 @@ def list_worktrees(repo_path: Path) -> list[tuple[Path, str]]:
         return worktrees
 
     except GitCommandError as e:
-        raise GitError(f"Failed to list worktrees: {e}")
+        raise GitError(f"Failed to list worktrees: {e}") from e
