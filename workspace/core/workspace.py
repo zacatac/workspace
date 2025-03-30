@@ -3,6 +3,8 @@ import subprocess
 from pathlib import Path
 from typing import Any, Optional
 
+import petname  # type: ignore
+
 from workspace.core.config import ActiveWorkspace, GlobalConfig, Project
 from workspace.core.git import GitError, create_worktree, remove_worktree
 
@@ -34,10 +36,20 @@ def get_project_for_workspace(workspace: ActiveWorkspace, config: GlobalConfig) 
     )
 
 
+def generate_worktree_name() -> str:
+    """Generate a friendly, readable worktree name.
+    
+    Returns:
+        A unique, human-readable name for the worktree
+    """
+    # Generate a readable name with 2 words (adjective + noun)
+    return str(petname.generate(words=2, separator="-"))
+
 def create_workspace(
     project: Project,
     name: str,
     branch: Optional[str] = None,
+    worktree_name: Optional[str] = None,
 ) -> ActiveWorkspace:
     """Create a new workspace.
 
@@ -45,6 +57,7 @@ def create_workspace(
         project: Project configuration
         name: Name of the workspace
         branch: Optional base branch to create from
+        worktree_name: Optional worktree name, generated if not provided
 
     Returns:
         The created workspace configuration
@@ -53,22 +66,28 @@ def create_workspace(
         WorkspaceError: If workspace creation fails
     """
     try:
+        # Generate or use provided worktree name
+        if not worktree_name:
+            worktree_name = generate_worktree_name()
+            
         # Create worktree directory in the parent directory of the project
         worktrees_dir = project.root_directory.parent / "worktrees"
-        worktree_path = worktrees_dir / f"{project.name}-{name}"
+        worktree_path = worktrees_dir / f"{project.name}-{worktree_name}"
         worktrees_dir.mkdir(parents=True, exist_ok=True)
 
-        # Create Git worktree
+        # Create Git worktree using the worktree name as the branch name
+        # This decouples the workspace name from the branch name
         create_worktree(
             repo_path=project.root_directory,
             worktree_path=worktree_path,
-            branch_name=name,
+            branch_name=worktree_name,
             base_branch=branch,
         )
 
         return ActiveWorkspace(
             project=project.name,
             name=name,
+            worktree_name=worktree_name,
             path=worktree_path,
             started=False,
         )

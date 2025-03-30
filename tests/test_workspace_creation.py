@@ -17,19 +17,24 @@ class TestWorkspaceCreation:
         # Add project to global config
         global_config.projects.append(example_project_config)
         
-        # Create a new workspace
+        # Create a new workspace with a specific worktree name
+        worktree_name = "test-worktree"
         workspace = create_workspace(
-            project=example_project_config, name="test-feature", branch=None
+            project=example_project_config, 
+            name="test-feature", 
+            branch=None,
+            worktree_name=worktree_name
         )
 
         # Verify workspace was created
         assert workspace.name == "test-feature"
         assert workspace.project == "example"
+        assert workspace.worktree_name == worktree_name
         assert workspace.path.exists()
         assert workspace.started is False
 
         # Verify worktree directory structure
-        worktree_path = example_project_config.root_directory.parent / "worktrees" / "example-test-feature"
+        worktree_path = example_project_config.root_directory.parent / "worktrees" / f"example-{worktree_name}"
         assert workspace.path == worktree_path
         assert (worktree_path / "main.py").exists()
         assert (worktree_path / ".workspace.toml").exists()
@@ -52,13 +57,18 @@ class TestWorkspaceCreation:
         os.system("git add dev.txt")
         os.system("git commit -m 'Add development file'")
 
-        # Create a new workspace based on the development branch
+        # Create a new workspace based on the development branch with a specific worktree name
+        worktree_name = "dev-worktree"
         workspace = create_workspace(
-            project=example_project_config, name="feature-from-dev", branch="development"
+            project=example_project_config, 
+            name="feature-from-dev", 
+            branch="development",
+            worktree_name=worktree_name
         )
 
         # Verify workspace was created with content from development branch
         assert workspace.name == "feature-from-dev"
+        assert workspace.worktree_name == worktree_name
         assert (workspace.path / "dev.txt").exists()
 
         # Clean up
@@ -73,7 +83,7 @@ class TestWorkspaceCreation:
         
         workspaces = []
 
-        # Create multiple workspaces
+        # Create multiple workspaces with auto-generated worktree names
         for i in range(3):
             workspace = create_workspace(
                 project=example_project_config, name=f"feature-{i}", branch=None
@@ -84,6 +94,10 @@ class TestWorkspaceCreation:
 
         # Verify we have the expected number of workspaces
         assert len(global_config.active_workspaces) == 3
+        
+        # Verify that each workspace has a unique worktree name
+        worktree_names = [ws.worktree_name for ws in workspaces]
+        assert len(worktree_names) == len(set(worktree_names)), "Worktree names should be unique"
 
         # Clean up all workspaces
         for workspace in workspaces:

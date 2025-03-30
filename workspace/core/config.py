@@ -33,6 +33,7 @@ class ActiveWorkspace(BaseModel):
 
     project: str = Field(description="Project name")
     name: str = Field(description="Workspace name")
+    worktree_name: str = Field(description="Worktree name used for the directory and git branch")
     path: Path = Field(description="Path to the workspace")
     started: bool = Field(description="Whether the workspace is started")
 
