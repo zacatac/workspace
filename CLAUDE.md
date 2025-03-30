@@ -2,15 +2,20 @@
 
 ## Commands
 - **Install:** `uv pip install -e .`
+- **Install dev dependencies:** `uv pip install -e ".[dev]"`
 - **Run CLI:** `workspace [command] [options]` or `uv run workspace [command] [options]`
 - **Test:** `uv run pytest tests/`
 - **Test single file:** `uv run pytest tests/test_file.py`
 - **Test single test:** `uv run pytest tests/test_file.py::TestClass::test_method`
-- **Lint/Typecheck:** `uv run mypy workspace/`
+- **Typecheck:** `uv run mypy workspace/`
+- **Lint:** `uv run ruff check workspace/ tests/`
+- **Format:** `uv run ruff format workspace/ tests/`
+- **Fix auto-fixable lint issues:** `uv run ruff check --fix workspace/ tests/`
 
 ## Code Style
-- **Formatting:** Black with 100 character line length
-- **Imports:** Use isort (standard library → third-party → local, alphabetized)
+- **Formatting:** Ruff formatter with 100 character line length
+- **Linting:** Ruff linter with various rules enabled
+- **Imports:** Managed by Ruff isort plugin (standard library → third-party → local, alphabetized)
 - **Types:** Full type annotations required (mypy strict mode)
 - **Naming:** snake_case for variables/functions, PascalCase for classes
 - **Documentation:** Google-style docstrings

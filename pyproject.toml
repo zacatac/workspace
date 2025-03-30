@@ -18,6 +18,11 @@ dependencies = [
     "petname>=2.6",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.3.4",
+]
+
 
 [project.scripts]
 workspace = "workspace.cli.main:app"
@@ -50,3 +55,34 @@ disallow_incomplete_defs = false  # Allow missing parameter types
 check_untyped_defs = false        # Disable type checking in untyped functions
 ignore_missing_imports = true     # Ignore missing imports (including pytest)
 disallow_untyped_decorators = false # Allow untyped decorators in tests
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "N",   # pep8-naming
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "SIM", # flake8-simplify
+    "TID", # flake8-tidy-imports
+    "RUF", # Ruff-specific rules
+]
+ignore = []
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["E501"]  # Allow long lines in tests
+
+[tool.ruff.lint.isort]
+known-first-party = ["workspace"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+skip-magic-trailing-comma = false
