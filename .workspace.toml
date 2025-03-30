@@ -1,0 +1,8 @@
+
+[project]
+name = "self"
+
+[infrastructure]
+start = "echo 'Starting infrastructure'"
+stop = "echo 'Stopping infrastructure'"
+test = "uv run pytest ."
