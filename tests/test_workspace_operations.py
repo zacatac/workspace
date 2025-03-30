@@ -15,6 +15,11 @@ from workspace.core.workspace import (
     start_workspace,
     stop_workspace,
     load_project_config,
+    create_tmux_session,
+    destroy_tmux_session,
+    attach_to_tmux_session,
+    attach_to_workspace_tmux,
+    switch_workspace,
 )
 
 
@@ -133,3 +138,71 @@ class TestWorkspaceOperations:
             if workspace2 in global_config.active_workspaces:
                 global_config.active_workspaces.remove(workspace2)
             destroy_workspace(workspace2, global_config, force=True)
+
+    @patch("subprocess.run")
+    def test_tmux_session_creation(self, mock_run, example_project_config: Project):
+        """Test that a workspace creates a tmux session."""
+        # Mock subprocess.run to return success for tmux commands
+        mock_run.return_value = MagicMock(returncode=0)
+
+        # Create a workspace which should create a tmux session
+        workspace = create_workspace(project=example_project_config, name="test-tmux", branch=None)
+
+        # Verify the workspace has a tmux session name
+        assert workspace.tmux_session is not None
+        assert workspace.tmux_session == f"{example_project_config.name}-{workspace.worktree_name}"
+
+        # Verify tmux commands were called
+        mock_run.assert_any_call(
+            ["tmux", "has-session", "-t", workspace.tmux_session],
+            capture_output=True,
+            text=True,
+        )
+
+    @patch("subprocess.run")
+    def test_tmux_session_attachment(
+        self, mock_run, example_project_config: Project, global_config: GlobalConfig
+    ):
+        """Test attaching to a workspace's tmux session."""
+        # Mock subprocess.run to return success for tmux commands
+        mock_run.return_value = MagicMock(returncode=0)
+
+        # Create a workspace with a tmux session
+        workspace = create_workspace(
+            project=example_project_config, name="test-tmux-attach", branch=None
+        )
+
+        # Mock print to capture output
+        with patch("builtins.print") as mock_print:
+            # Switch to the workspace with tmux_attach=True
+            switch_workspace(workspace, global_config, tmux_attach=True)
+
+            # Verify print was called with cd command and tmux attach command
+            mock_print.assert_any_call(f"cd {workspace.path}")
+            mock_print.assert_any_call(f"tmux attach-session -t {workspace.tmux_session}")
+
+    @patch("subprocess.run")
+    def test_tmux_session_destruction(
+        self, mock_run, example_project_config: Project, global_config: GlobalConfig
+    ):
+        """Test that destroying a workspace also destroys its tmux session."""
+        # Mock subprocess.run to return success for tmux commands
+        mock_run.return_value = MagicMock(returncode=0)
+
+        # Create a workspace with a tmux session
+        workspace = create_workspace(
+            project=example_project_config, name="test-tmux-destroy", branch=None
+        )
+
+        # Verify the workspace has a tmux session
+        assert workspace.tmux_session is not None
+
+        # Destroy the workspace
+        destroy_workspace(workspace, global_config)
+
+        # Verify tmux kill-session was called
+        mock_run.assert_any_call(
+            ["tmux", "kill-session", "-t", workspace.tmux_session],
+            capture_output=True,
+            text=True,
+        )

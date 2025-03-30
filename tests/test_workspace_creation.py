@@ -16,15 +16,15 @@ class TestWorkspaceCreation:
         """Test creating a workspace."""
         # Add project to global config
         global_config.projects.append(example_project_config)
-        
+
         # Create a new workspace with a specific worktree name
         worktree_name = "test-worktree"
         workspace = create_workspace(
-            project=example_project_config, 
-            name="test-feature", 
+            project=example_project_config,
+            name="test-feature",
             branch=None,
             worktree_name=worktree_name,
-            config=global_config
+            config=global_config,
         )
 
         # Verify workspace was created
@@ -35,7 +35,9 @@ class TestWorkspaceCreation:
         assert workspace.started is False
 
         # Verify worktree directory structure
-        worktree_path = example_project_config.root_directory.parent / "worktrees" / f"example-{worktree_name}"
+        worktree_path = (
+            example_project_config.root_directory.parent / "worktrees" / f"example-{worktree_name}"
+        )
         assert workspace.path == worktree_path
         assert (worktree_path / "main.py").exists()
         assert (worktree_path / ".workspace.toml").exists()
@@ -50,7 +52,7 @@ class TestWorkspaceCreation:
         """Test creating a workspace from a specific base branch."""
         # Add project to global config
         global_config.projects.append(example_project_config)
-        
+
         # Create a development branch first
         os.chdir(temp_workspace_dir)
         os.system("git checkout -b development")
@@ -61,11 +63,11 @@ class TestWorkspaceCreation:
         # Create a new workspace based on the development branch with a specific worktree name
         worktree_name = "dev-worktree"
         workspace = create_workspace(
-            project=example_project_config, 
-            name="feature-from-dev", 
+            project=example_project_config,
+            name="feature-from-dev",
             branch="development",
             worktree_name=worktree_name,
-            config=global_config
+            config=global_config,
         )
 
         # Verify workspace was created with content from development branch
@@ -82,16 +84,16 @@ class TestWorkspaceCreation:
         """Test creating multiple workspaces simultaneously."""
         # Add project to global config
         global_config.projects.append(example_project_config)
-        
+
         workspaces = []
 
         # Create multiple workspaces with auto-generated worktree names
         for i in range(3):
             workspace = create_workspace(
-                project=example_project_config, 
-                name=f"feature-{i}", 
+                project=example_project_config,
+                name=f"feature-{i}",
                 branch=None,
-                config=global_config
+                config=global_config,
             )
             workspaces.append(workspace)
             # Add workspace to global config
@@ -99,7 +101,7 @@ class TestWorkspaceCreation:
 
         # Verify we have the expected number of workspaces
         assert len(global_config.active_workspaces) == 3
-        
+
         # Verify that each workspace has a unique worktree name
         worktree_names = [ws.worktree_name for ws in workspaces]
         assert len(worktree_names) == len(set(worktree_names)), "Worktree names should be unique"
@@ -109,14 +111,14 @@ class TestWorkspaceCreation:
             destroy_workspace(workspace, global_config)
             # Also remove from active workspaces list
             global_config.active_workspaces.remove(workspace)
-            
+
     def test_workspace_name_different_from_worktree(
         self, example_project_config: Project, global_config: GlobalConfig
     ):
         """Test that workspace name can be different from worktree name."""
         # Add project to global config
         global_config.projects.append(example_project_config)
-        
+
         # Create workspace with explicit worktree name
         worktree_name = "custom-worktree"
         workspace = create_workspace(
@@ -124,14 +126,14 @@ class TestWorkspaceCreation:
             name="feature-xyz",  # Different from worktree name
             branch=None,
             worktree_name=worktree_name,
-            config=global_config
+            config=global_config,
         )
-        
+
         # Verify names are different but both preserved
         assert workspace.name == "feature-xyz"
         assert workspace.worktree_name == worktree_name
         assert worktree_name in str(workspace.path)
-        
+
         # Clean up
         global_config.active_workspaces.append(workspace)
         destroy_workspace(workspace, global_config)
