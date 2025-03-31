@@ -13,6 +13,15 @@ class Infrastructure(BaseModel):
     test: str | None = Field(None, description="Command to run tests")
 
 
+class ProcessStatus(str, Enum):
+    """Status of a Claude process"""
+
+    NOT_STARTED = "not_started"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 class Agent(BaseModel):
     """Agent configuration for a project"""
 
@@ -29,6 +38,29 @@ class Project(BaseModel):
     agent: Agent | None = Field(None, description="Agent configuration")
 
 
+class ClaudeProcess(BaseModel):
+    """Information about a Claude process"""
+
+    status: ProcessStatus = Field(
+        default=ProcessStatus.NOT_STARTED, description="Current status of the Claude process"
+    )
+    start_time: datetime.datetime | None = Field(
+        default=None, description="Time when the Claude process was started"
+    )
+    end_time: datetime.datetime | None = Field(
+        default=None, description="Time when the Claude process completed or failed"
+    )
+    exit_code: int | None = Field(
+        default=None, description="Exit code of the completed Claude process"
+    )
+    error_message: str | None = Field(
+        default=None, description="Error message if the Claude process failed"
+    )
+    result_file: Path | None = Field(
+        default=None, description="Path to file containing Claude process results"
+    )
+
+
 class ActiveWorkspace(BaseModel):
     """Active workspace configuration"""
 
@@ -38,6 +70,10 @@ class ActiveWorkspace(BaseModel):
     path: Path = Field(description="Path to the workspace")
     started: bool = Field(description="Whether the workspace is started")
     tmux_session: str | None = Field(None, description="Name of the associated tmux session")
+    claude_process: ClaudeProcess = Field(
+        default_factory=ClaudeProcess,
+        description="Information about the Claude process in this workspace",
+    )
 
 
 class TaskType(str, Enum):
