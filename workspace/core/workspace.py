@@ -364,6 +364,40 @@ def destroy_workspace(
             with suppress(WorkspaceError):
                 destroy_tmux_session(workspace.tmux_session)
 
+        # Update any tasks that reference this workspace
+        tasks_updated = []
+        for task in config.tasks:
+            if task.project == workspace.project:
+                task_modified = False
+                for subtask in task.subtasks:
+                    if subtask.workspace_name == workspace.name:
+                        # If the subtask was in progress, mark it as pending again
+                        if subtask.status == "in_progress":
+                            subtask.status = "pending"
+                            task_modified = True
+
+                        # Clear the workspace association
+                        subtask.workspace_name = None
+                        subtask.worktree_name = None
+                        task_modified = True
+
+                # If any subtask was modified, make sure task status is consistent
+                if task_modified:
+                    # If task was marked as completed but has subtasks that are now pending,
+                    # change task status back to in_progress
+                    pending_subtasks = any(st.status != "completed" for st in task.subtasks)
+                    if task.status == "completed" and pending_subtasks:
+                        task.status = "in_progress"
+
+                    tasks_updated.append(task)
+
+        # Update task plans for any modified tasks
+        if tasks_updated:
+            from workspace.core.agent import update_task_plan
+
+            for task in tasks_updated:
+                update_task_plan(task)
+
         # Clean up workspace directory
         if workspace.path.exists():
             for root, dirs, files in os.walk(workspace.path, topdown=False):
