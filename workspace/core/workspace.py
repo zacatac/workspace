@@ -1,4 +1,6 @@
+import datetime
 import os
+import re
 import shlex
 import subprocess
 from pathlib import Path
@@ -327,7 +329,10 @@ def create_workspace(
             # If tmux session creation fails, we'll continue without it
             pass
 
-        return ActiveWorkspace(
+        # Create the workspace object
+        from workspace.core.config import ProcessStatus
+
+        workspace = ActiveWorkspace(
             project=project.name,
             name=name,
             worktree_name=worktree_name,
@@ -335,6 +340,13 @@ def create_workspace(
             started=False,
             tmux_session=tmux_session_result,
         )
+
+        # Initialize workspace's ClaudeProcess as running if we have an initial prompt
+        if initial_prompt and tmux_session_result:
+            workspace.claude_process.status = ProcessStatus.RUNNING
+            workspace.claude_process.start_time = datetime.datetime.now()
+
+        return workspace
 
     except (GitError, OSError) as e:
         raise WorkspaceError(f"Failed to create workspace: {e}") from e
@@ -562,6 +574,372 @@ def run_in_workspace(
 
     except subprocess.SubprocessError as e:
         raise WorkspaceError(f"Failed to run command in workspace: {e}") from e
+
+
+def execute_tmux_command(command: list[str]) -> tuple[bool, str, str]:
+    """Execute a tmux command and return the result.
+
+    Args:
+        command: The tmux command to execute as a list of strings
+
+    Returns:
+        Tuple of (success, stdout, stderr)
+
+    Raises:
+        WorkspaceError: If command execution fails for reasons other than tmux errors
+    """
+    try:
+        # Run the tmux command
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+        )
+
+        # Return success status and output
+        success = result.returncode == 0
+        return (success, result.stdout, result.stderr)
+    except subprocess.SubprocessError as e:
+        raise WorkspaceError(f"Failed to execute tmux command: {e}") from e
+
+
+def list_tmux_sessions() -> list[str]:
+    """List all active tmux sessions.
+
+    Returns:
+        List of tmux session names
+
+    Raises:
+        WorkspaceError: If listing sessions fails
+    """
+    success, stdout, stderr = execute_tmux_command(
+        ["tmux", "list-sessions", "-F", "#{session_name}"]
+    )
+
+    if not success:
+        # If there are no sessions, tmux returns an error
+        if "no server running" in stderr or "no sessions" in stderr:
+            return []
+        raise WorkspaceError(f"Failed to list tmux sessions: {stderr}")
+
+    # Return list of session names
+    return stdout.strip().split("\n") if stdout.strip() else []
+
+
+def get_tmux_pane_processes(session_name: str, pane_id: str) -> list[dict[str, str]]:
+    """Get information about processes running in a tmux pane.
+
+    Args:
+        session_name: Name of the tmux session
+        pane_id: ID of the pane (e.g., "0", "1")
+
+    Returns:
+        List of process dictionaries with 'pid', 'command', and 'status'
+
+    Raises:
+        WorkspaceError: If getting pane processes fails
+    """
+    full_pane_id = f"{session_name}.{pane_id}"
+
+    # First check if the pane exists
+    success, _, stderr = execute_tmux_command(["tmux", "has-session", "-t", full_pane_id])
+    if not success:
+        if "no such session" in stderr:
+            return []
+        raise WorkspaceError(f"Failed to check tmux pane existence: {stderr}")
+
+    # Get the pane PID
+    success, stdout, stderr = execute_tmux_command(
+        ["tmux", "display-message", "-p", "-t", full_pane_id, "#{pane_pid}"]
+    )
+    if not success:
+        raise WorkspaceError(f"Failed to get tmux pane PID: {stderr}")
+
+    pane_pid = stdout.strip()
+    if not pane_pid:
+        return []
+
+    # Get child processes of the pane shell
+    try:
+        result = subprocess.run(
+            ["ps", "-o", "pid,command,state", "--ppid", pane_pid],
+            capture_output=True,
+            text=True,
+        )
+
+        if result.returncode != 0:
+            raise WorkspaceError(f"Failed to get processes for pane: {result.stderr}")
+
+        # Parse the ps output
+        processes = []
+        lines = result.stdout.strip().split("\n")[1:]  # Skip header
+
+        for line in lines:
+            parts = re.split(r"\s+", line.strip(), maxsplit=2)
+            if len(parts) >= 3:
+                pid, command, state = parts[0], parts[1], parts[2]
+                processes.append(
+                    {
+                        "pid": pid,
+                        "command": command,
+                        "status": state,
+                    }
+                )
+
+        return processes
+    except subprocess.SubprocessError as e:
+        raise WorkspaceError(f"Failed to get processes for pane: {e}") from e
+
+
+def is_claude_running_in_tmux_session(session_name: str) -> bool:
+    """Check if Claude is running in a tmux session.
+
+    Args:
+        session_name: Name of the tmux session
+
+    Returns:
+        True if Claude is running, False otherwise
+
+    Raises:
+        WorkspaceError: If checking Claude status fails
+    """
+    # Check if the session exists
+    success, _, _ = execute_tmux_command(["tmux", "has-session", "-t", session_name])
+    if not success:
+        return False
+
+    # Claude is typically run in pane 1
+    processes = get_tmux_pane_processes(session_name, "1")
+
+    # Look for "claude" in the process commands
+    return any(
+        proc["command"].endswith("claude") or "claude" in proc["command"] for proc in processes
+    )
+
+
+def get_claude_process_status(session_name: str) -> str | None:
+    """Get the status of the Claude process in a tmux session.
+
+    Args:
+        session_name: Name of the tmux session
+
+    Returns:
+        Status of Claude process ('running', 'stopped', 'completed', or None if not found)
+
+    Raises:
+        WorkspaceError: If checking Claude status fails
+    """
+    # Check if the session exists
+    success, _, _ = execute_tmux_command(["tmux", "has-session", "-t", session_name])
+    if not success:
+        return None
+
+    # Get processes in the Claude pane (typically pane 1)
+    processes = get_tmux_pane_processes(session_name, "1")
+
+    # Find Claude process
+    claude_process = None
+    for proc in processes:
+        if proc["command"].endswith("claude") or "claude" in proc["command"]:
+            claude_process = proc
+            break
+
+    if not claude_process:
+        # If no Claude process is found but the pane exists, Claude has completed/exited
+        return "completed"
+
+    # Check process state
+    if claude_process["status"].startswith("S"):
+        return "stopped"  # Sleeping
+    elif claude_process["status"].startswith("R"):
+        return "running"  # Running
+    else:
+        return "other"  # Other states (Z, T, etc.)
+
+
+def update_claude_process_status(workspace: ActiveWorkspace) -> str | None:
+    """Update the status of the Claude process for a workspace.
+
+    Args:
+        workspace: The workspace to check
+
+    Returns:
+        Current Claude process status or None if no tmux session exists
+
+    Raises:
+        WorkspaceError: If checking Claude status fails
+    """
+    from workspace.core.config import ProcessStatus
+
+    if not workspace.tmux_session:
+        return None
+
+    # Get Claude process status
+    tmux_status = get_claude_process_status(workspace.tmux_session)
+
+    # Update the workspace's claude_process status
+    current_time = datetime.datetime.now()
+
+    if tmux_status == "running":
+        # Claude is running
+        workspace.claude_process.status = ProcessStatus.RUNNING
+        if workspace.claude_process.start_time is None:
+            workspace.claude_process.start_time = current_time
+    elif tmux_status == "completed":
+        # Claude has finished
+        # Only capture output if we're transitioning from RUNNING to COMPLETED
+        if workspace.claude_process.status == ProcessStatus.RUNNING:
+            # Capture Claude's output to a file
+            try:
+                capture_file = capture_tmux_pane_content(workspace.tmux_session)
+                if capture_file:
+                    workspace.claude_process.result_file = capture_file
+            except WorkspaceError:
+                # If capturing fails, just continue
+                pass
+
+        workspace.claude_process.status = ProcessStatus.COMPLETED
+        if workspace.claude_process.end_time is None:
+            workspace.claude_process.end_time = current_time
+        workspace.claude_process.exit_code = 0
+    elif tmux_status is None:
+        # Session doesn't exist
+        if workspace.claude_process.status == ProcessStatus.RUNNING:
+            # Session was terminated unexpectedly
+            workspace.claude_process.status = ProcessStatus.FAILED
+            workspace.claude_process.end_time = current_time
+            workspace.claude_process.error_message = "Session terminated unexpectedly"
+
+    return tmux_status
+
+
+def check_completed_claude_processes(config: GlobalConfig) -> list[ActiveWorkspace]:
+    """Check all workspaces for completed Claude processes.
+
+    This is useful for identifying workspaces where Claude has finished running
+    and might need cleanup or notification.
+
+    Args:
+        config: The global configuration with active workspaces
+
+    Returns:
+        List of workspaces with completed Claude processes
+
+    Raises:
+        WorkspaceError: If checking Claude status fails
+    """
+    from workspace.core.config import ProcessStatus
+
+    completed_workspaces = []
+
+    for workspace in config.active_workspaces:
+        if not workspace.tmux_session:
+            continue
+
+        # Update Claude process status
+        update_claude_process_status(workspace)
+
+        # If Claude has completed, add to list
+        if workspace.claude_process.status == ProcessStatus.COMPLETED:
+            completed_workspaces.append(workspace)
+
+    return completed_workspaces
+
+
+def get_tmux_session_capture_file(session_name: str) -> Path:
+    """Get the path to save a tmux session's pane content.
+
+    Args:
+        session_name: Name of the tmux session
+
+    Returns:
+        Path where the session's pane content can be saved
+    """
+    config_dir = Path.home() / ".workspace" / "sessions"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    return config_dir / f"{session_name}.txt"
+
+
+def capture_tmux_pane_content(session_name: str, pane_id: str = "1") -> Path | None:
+    """Capture the content of a tmux pane to a file.
+
+    This is useful for saving Claude's output when a process completes.
+
+    Args:
+        session_name: Name of the tmux session
+        pane_id: ID of the pane to capture (default: "1", which is typically Claude)
+
+    Returns:
+        Path to the file containing the captured content, or None if capture failed
+
+    Raises:
+        WorkspaceError: If capturing content fails
+    """
+    full_pane_id = f"{session_name}.{pane_id}"
+
+    # Check if the pane exists
+    success, _, _ = execute_tmux_command(["tmux", "has-session", "-t", full_pane_id])
+    if not success:
+        return None
+
+    # Capture the pane content
+    capture_file = get_tmux_session_capture_file(session_name)
+
+    try:
+        success, _, stderr = execute_tmux_command(
+            ["tmux", "capture-pane", "-pJ", "-S", "-", "-t", full_pane_id]
+        )
+
+        if not success:
+            raise WorkspaceError(f"Failed to capture tmux pane content: {stderr}")
+
+        # Save the captured content
+        success, stdout, stderr = execute_tmux_command(
+            ["tmux", "save-buffer", "-", "-t", full_pane_id]
+        )
+
+        if not success:
+            raise WorkspaceError(f"Failed to save tmux buffer: {stderr}")
+
+        # Write the output to a file
+        with open(capture_file, "w") as f:
+            f.write(stdout)
+
+        return capture_file
+    except Exception as e:
+        raise WorkspaceError(f"Failed to capture tmux pane content: {e}") from e
+
+
+def send_command_to_tmux_pane(session_name: str, command: str, pane_id: str = "1") -> bool:
+    """Send a command to a tmux pane.
+
+    Args:
+        session_name: Name of the tmux session
+        command: Command to send
+        pane_id: ID of the pane to send to (default: "1", which is typically Claude)
+
+    Returns:
+        True if command was sent successfully, False otherwise
+
+    Raises:
+        WorkspaceError: If sending command fails
+    """
+    full_pane_id = f"{session_name}.{pane_id}"
+
+    # Check if the pane exists
+    success, _, _ = execute_tmux_command(["tmux", "has-session", "-t", full_pane_id])
+    if not success:
+        return False
+
+    # Send the command
+    success, _, stderr = execute_tmux_command(
+        ["tmux", "send-keys", "-t", full_pane_id, command, "Enter"]
+    )
+
+    if not success:
+        raise WorkspaceError(f"Failed to send command to tmux pane: {stderr}")
+
+    return True
 
 
 def attach_to_workspace_tmux(workspace: ActiveWorkspace) -> None:
