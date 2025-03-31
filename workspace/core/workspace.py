@@ -82,23 +82,40 @@ def create_tmux_session(
 
         # Start claude in the right pane, optionally with an initial prompt
         if initial_prompt:
-            # Escape quotes and special characters in the prompt
-            escaped_prompt = initial_prompt.replace('"', '\\"')
-            escaped_prompt = escaped_prompt.replace("'", "\\'")
-            escaped_prompt = escaped_prompt.replace(";", "\\;")
-            # Send claude command with the prompt as argument and allowed tools
+            # First start claude with allowed tools
             result = subprocess.run(
                 [
                     "tmux",
                     "send-keys",
                     "-t",
                     f"{session_name}.1",
-                    f"claude --allowedTools Bash,GlobTool,GrepTool,View,LS '{escaped_prompt}'",
+                    "claude --allowedTools Bash,GlobTool,GrepTool,View,LS",
                     "Enter",
                 ],
                 capture_output=True,
                 text=True,
             )
+
+            # If that was successful, send the initial prompt as separate keys
+            if result.returncode == 0:
+                # Escape any special characters in the prompt
+                escaped_prompt = initial_prompt.replace('"', '\\"')
+                escaped_prompt = escaped_prompt.replace("'", "\\'")
+                escaped_prompt = escaped_prompt.replace(";", "\\;")
+
+                # Send the prompt as input after Claude has started
+                result = subprocess.run(
+                    [
+                        "tmux",
+                        "send-keys",
+                        "-t",
+                        f"{session_name}.1",
+                        escaped_prompt,
+                        "Enter",
+                    ],
+                    capture_output=True,
+                    text=True,
+                )
         else:
             # Start claude without an initial prompt but with allowed tools
             result = subprocess.run(
