@@ -162,6 +162,9 @@ def execute_subtask(task: Task, subtask_id: str, config: GlobalConfig) -> SubTas
         # Update subtask status
         subtask.status = "in_progress"
 
+        # Prepare prompt with subtask description
+        subtask_prompt = f"Subtask: {subtask.name}\n\n{subtask.description}"
+
         # For sequential tasks, reuse the existing workspace if any
         if task.task_type == TaskType.SEQUENTIAL:
             # Check if any workspace exists for this task
@@ -177,9 +180,32 @@ def execute_subtask(task: Task, subtask_id: str, config: GlobalConfig) -> SubTas
                 # Reuse existing workspace
                 subtask.workspace_name = existing_workspace.name
                 subtask.worktree_name = existing_workspace.worktree_name
+
+                # If there's a tmux session, recreate it with the prompt
+                if existing_workspace.tmux_session:
+                    from contextlib import suppress
+
+                    from workspace.core.workspace import (
+                        WorkspaceError,
+                        create_tmux_session,
+                        destroy_tmux_session,
+                    )
+
+                    # Destroy existing session (ignore errors)
+                    with suppress(WorkspaceError):
+                        destroy_tmux_session(existing_workspace.tmux_session)
+                    # Create new session with initial prompt
+                    create_tmux_session(
+                        existing_workspace.tmux_session, existing_workspace.path, subtask_prompt
+                    )
             else:
-                # Create new workspace for sequential task
-                workspace = create_workspace(project=project, name=workspace_name, config=config)
+                # Create new workspace for sequential task with initial prompt
+                workspace = create_workspace(
+                    project=project,
+                    name=workspace_name,
+                    config=config,
+                    initial_prompt=subtask_prompt,
+                )
 
                 # Add workspace to global config if not already there
                 if workspace not in config.active_workspaces:
@@ -192,7 +218,10 @@ def execute_subtask(task: Task, subtask_id: str, config: GlobalConfig) -> SubTas
             # Create a unique workspace for this subtask
             workspace_name = f"task-{task.id}-{subtask.id}"
 
-            workspace = create_workspace(project=project, name=workspace_name, config=config)
+            # Create workspace with initial prompt
+            workspace = create_workspace(
+                project=project, name=workspace_name, config=config, initial_prompt=subtask_prompt
+            )
 
             # Add workspace to global config
             if workspace not in config.active_workspaces:

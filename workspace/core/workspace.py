@@ -24,16 +24,21 @@ class WorkspaceError(Exception):
     pass
 
 
-def create_tmux_session(session_name: str, start_directory: Path) -> bool:
+def create_tmux_session(
+    session_name: str,
+    start_directory: Path,
+    initial_prompt: str | None = None,
+) -> bool:
     """Create a new tmux session if it doesn't exist.
 
     Creates a session with two vertical panes:
     - Left pane: Empty shell
-    - Right pane: Running the 'claude' command
+    - Right pane: Running the 'claude' command with optional initial prompt
 
     Args:
         session_name: Name for the tmux session
         start_directory: Directory to start the session in
+        initial_prompt: Optional initial prompt to send to claude
 
     Returns:
         True if session was created or already exists, False otherwise
@@ -73,12 +78,32 @@ def create_tmux_session(session_name: str, start_directory: Path) -> bool:
         if result.returncode != 0:
             raise WorkspaceError(f"Failed to split tmux window: {result.stderr}")
 
-        # Start claude in the right pane
-        result = subprocess.run(
-            ["tmux", "send-keys", "-t", f"{session_name}.1", "claude", "Enter"],
-            capture_output=True,
-            text=True,
-        )
+        # Start claude in the right pane, optionally with an initial prompt
+        if initial_prompt:
+            # Escape quotes and special characters in the prompt
+            escaped_prompt = initial_prompt.replace('"', '\\"')
+            escaped_prompt = escaped_prompt.replace("'", "\\'")
+            escaped_prompt = escaped_prompt.replace(";", "\\;")
+            # Send claude command with the prompt as argument
+            result = subprocess.run(
+                [
+                    "tmux",
+                    "send-keys",
+                    "-t",
+                    f"{session_name}.1",
+                    f"claude '{escaped_prompt}'",
+                    "Enter",
+                ],
+                capture_output=True,
+                text=True,
+            )
+        else:
+            # Start claude without an initial prompt
+            result = subprocess.run(
+                ["tmux", "send-keys", "-t", f"{session_name}.1", "claude", "Enter"],
+                capture_output=True,
+                text=True,
+            )
 
         if result.returncode != 0:
             raise WorkspaceError(f"Failed to start claude in tmux pane: {result.stderr}")
@@ -238,6 +263,7 @@ def create_workspace(
     worktree_name: str | None = None,
     config: GlobalConfig | None = None,
     reuse_worktree: bool = True,
+    initial_prompt: str | None = None,
 ) -> ActiveWorkspace:
     """Create a new workspace.
 
@@ -288,7 +314,7 @@ def create_workspace(
         tmux_session_result: str | None = None
         tmux_session_name = f"{project.name}-{worktree_name}"
         try:
-            if create_tmux_session(tmux_session_name, worktree_path):
+            if create_tmux_session(tmux_session_name, worktree_path, initial_prompt):
                 tmux_session_result = tmux_session_name
         except WorkspaceError:
             # If tmux session creation fails, we'll continue without it
