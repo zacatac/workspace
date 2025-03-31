@@ -77,11 +77,12 @@ def analyze_task_with_agent(
             cmd = project_config.agent.primary
         else:
             # Default to Claude Code if installed
-            cmd = "claude-code"
+            cmd = "claude"
 
         # Create prompt for the agent
         prompt = f"""
-You are a development task planner. Your job is to analyze a task and break it down into subtasks.
+I need you to break down a development task into subtasks. This is a non-interactive request.
+Please respond with a JSON object only, no conversation.
 
 PROJECT: {project.name}
 
@@ -97,7 +98,7 @@ Your job is to:
 For SEQUENTIAL tasks, work happens in a single worktree with changes building on each other.
 For PARALLEL tasks, each subtask will have its own independent worktree.
 
-FORMAT YOUR RESPONSE AS A JSON OBJECT with the following structure:
+IMPORTANT: You must return only a JSON object with the following structure, with no other text:
 {{
   "name": "Short task name",
   "task_type": "sequential" or "parallel",
@@ -118,7 +119,11 @@ FORMAT YOUR RESPONSE AS A JSON OBJECT with the following structure:
 }}
 """
 
-        # Run the agent command
+        # Run the agent command with the initial prompt provided directly
+        # For Claude Code we need to use --print for non-interactive mode
+        # Adding --allowedTools Bash,GlobTool,GrepTool,View to ensure it has permissions to analyze
+        if "claude" in cmd and "--print" not in cmd:
+            cmd = f"{cmd} --print --allowedTools Bash,GlobTool,GrepTool,View,LS"
         result = subprocess.run(
             cmd,
             shell=True,
@@ -134,13 +139,26 @@ FORMAT YOUR RESPONSE AS A JSON OBJECT with the following structure:
         response = result.stdout
 
         # Extract JSON from response (agent might include other text)
+        # Claude Code will likely have conversation elements in the output
         start = response.find("{")
         end = response.rfind("}") + 1
-        if start == -1 or end == 0:
-            raise AgentError("No valid JSON found in agent response")
 
-        json_str = response[start:end]
-        agent_plan = json.loads(json_str)
+        if start == -1 or end == 0:
+            # If direct JSON extraction fails, try to find code blocks which may contain JSON
+            code_block_start = response.find("```json")
+            if code_block_start != -1:
+                json_start = response.find("\n", code_block_start) + 1
+                code_block_end = response.find("```", json_start)
+                if code_block_end != -1:
+                    json_str = response[json_start:code_block_end].strip()
+                    agent_plan = json.loads(json_str)
+                else:
+                    raise AgentError("No valid JSON found in agent response")
+            else:
+                raise AgentError("No valid JSON found in agent response")
+        else:
+            json_str = response[start:end]
+            agent_plan = json.loads(json_str)
 
         # Generate unique IDs for the task and subtasks if not provided
         task_id = generate_task_id()
@@ -193,8 +211,8 @@ def save_task_plan(task: Task) -> Path:
         AgentError: If saving fails
     """
     try:
-        # Convert to dictionary
-        task_dict = task.model_dump()
+        # Convert to dictionary and exclude None values
+        task_dict = task.model_dump(mode="json", exclude_none=True)
 
         # Save to TOML file
         path = get_task_plan_path(task.id)

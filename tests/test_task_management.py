@@ -134,6 +134,120 @@ class TestTaskManagement:
         assert task.subtasks[0].name == "Create models"
         assert task.subtasks[1].dependencies == ["1"]
 
+    @patch("workspace.core.agent.subprocess.run")
+    @patch("workspace.core.workspace.load_project_config")
+    def test_analyze_task_with_agent_process_management(
+        self, mock_load_config, mock_run, example_project_config
+    ):
+        """Test analyzing a complex task with an agent and verify task structure."""
+        # Mock loading project config
+        mock_config = ProjectConfig(
+            name="example",
+            infrastructure=Infrastructure(
+                start="echo 'Starting infrastructure'",
+                stop="echo 'Stopping infrastructure'",
+                test="echo 'Running tests'",
+            ),
+            agent=Agent(
+                primary="echo 'Running primary agent'",
+                readonly="echo 'Running readonly agent'",
+            ),
+        )
+        mock_load_config.return_value = mock_config
+
+        # Mock agent response with the provided example blob
+        mock_process = MagicMock()
+        mock_process.returncode = 0
+        mock_process.stdout = """This is an example response. What follows is the actual JSON output. {
+  "name": "Redesign process management for Claude tasks",
+  "task_type": "sequential",
+  "subtasks": [
+    {
+      "id": "1",
+      "name": "Design task status tracking system",
+      "description": "Create a data model and API for tracking Claude task status in tmux sessions. This includes defining the possible states (running, completed, failed, etc.) and the methods to update status.",
+      "dependencies": []
+    },
+    {
+      "id": "2",
+      "name": "Implement tmux session process monitoring",
+      "description": "Create functionality to check the status of Claude processes running in tmux sessions. This should include methods to determine if a Claude process is still running or has completed its execution.",
+      "dependencies": ["1"]
+    },
+    {
+      "id": "3",
+      "name": "Enhance workspace state management",
+      "description": "Update workspace.py to track and persist the state of Claude processes. This includes integrating process monitoring with the workspace management system.",
+      "dependencies": ["2"]
+    },
+    {
+      "id": "4",
+      "name": "Add process status CLI commands",
+      "description": "Create CLI commands to check the status of Claude tasks running in workspaces. This should allow users to list all tasks and their statuses.",
+      "dependencies": ["3"]
+    },
+    {
+      "id": "5",
+      "name": "Implement auto-cleanup for completed tasks",
+      "description": "Add functionality to automatically perform cleanup actions when a Claude task is detected as completed. This may include options to keep or destroy the workspace.",
+      "dependencies": ["3", "4"]
+    },
+    {
+      "id": "6",
+      "name": "Add task notification system",
+      "description": "Implement a system to notify users when Claude tasks complete. This could include terminal notifications or integration with system notification APIs.",
+      "dependencies": ["3"]
+    },
+    {
+      "id": "7",
+      "name": "Write tests for process management",
+      "description": "Create comprehensive tests for the new process management functionality, including unit tests and integration tests to verify proper status tracking and cleanup.",
+      "dependencies": ["5", "6"]
+    }
+  ]
+} And here is some useless cruft at the end"""
+        mock_run.return_value = mock_process
+
+        # Test analysis with fixed task ID for deterministic testing
+        with patch("workspace.core.agent.generate_task_id", return_value="test-task-id"):
+            task = analyze_task_with_agent(
+                task_description="Redesign process management for Claude tasks",
+                project=example_project_config,
+            )
+
+        # Verify task properties
+        assert task.name == "Redesign process management for Claude tasks"
+        assert task.task_type == TaskType.SEQUENTIAL
+        assert task.project == example_project_config.name
+        assert task.status == "planning"
+        assert task.id == "test-task-id"
+
+        # Verify subtasks
+        assert len(task.subtasks) == 7
+
+        # Verify first subtask
+        assert task.subtasks[0].id == "1"
+        assert task.subtasks[0].name == "Design task status tracking system"
+        assert "data model and API for tracking Claude task status" in task.subtasks[0].description
+        assert task.subtasks[0].dependencies == []
+        assert task.subtasks[0].status == "pending"
+
+        # Verify second subtask
+        assert task.subtasks[1].id == "2"
+        assert task.subtasks[1].name == "Implement tmux session process monitoring"
+        assert "check the status of Claude processes" in task.subtasks[1].description
+        assert task.subtasks[1].dependencies == ["1"]
+
+        # Verify a subtask with multiple dependencies
+        assert task.subtasks[4].id == "5"
+        assert task.subtasks[4].name == "Implement auto-cleanup for completed tasks"
+        assert task.subtasks[4].dependencies == ["3", "4"]
+
+        # Verify the last subtask
+        assert task.subtasks[6].id == "7"
+        assert task.subtasks[6].name == "Write tests for process management"
+        assert task.subtasks[6].dependencies == ["5", "6"]
+
     def test_create_task_plan(self, example_project_config):
         """Test creating a task plan."""
         # We need to mock the analyze_task_with_agent function at the module level
