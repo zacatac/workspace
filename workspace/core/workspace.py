@@ -68,9 +68,9 @@ def create_tmux_session(
         if result.returncode != 0:
             raise WorkspaceError(f"Failed to create tmux session: {result.stderr}")
 
-        # Split window vertically
+        # Split window vertically, making sure to set the same working directory
         result = subprocess.run(
-            ["tmux", "split-window", "-h", "-t", session_name],
+            ["tmux", "split-window", "-h", "-t", session_name, "-c", str(start_directory)],
             capture_output=True,
             text=True,
         )
@@ -84,23 +84,30 @@ def create_tmux_session(
             escaped_prompt = initial_prompt.replace('"', '\\"')
             escaped_prompt = escaped_prompt.replace("'", "\\'")
             escaped_prompt = escaped_prompt.replace(";", "\\;")
-            # Send claude command with the prompt as argument
+            # Send claude command with the prompt as argument and allowed tools
             result = subprocess.run(
                 [
                     "tmux",
                     "send-keys",
                     "-t",
                     f"{session_name}.1",
-                    f"claude '{escaped_prompt}'",
+                    f"claude --allowedTools Bash,GlobTool,GrepTool,View,LS '{escaped_prompt}'",
                     "Enter",
                 ],
                 capture_output=True,
                 text=True,
             )
         else:
-            # Start claude without an initial prompt
+            # Start claude without an initial prompt but with allowed tools
             result = subprocess.run(
-                ["tmux", "send-keys", "-t", f"{session_name}.1", "claude", "Enter"],
+                [
+                    "tmux",
+                    "send-keys",
+                    "-t",
+                    f"{session_name}.1",
+                    "claude --allowedTools Bash,GlobTool,GrepTool,View,LS",
+                    "Enter",
+                ],
                 capture_output=True,
                 text=True,
             )
